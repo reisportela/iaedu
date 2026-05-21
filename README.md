@@ -93,6 +93,39 @@ Examples of blocked or restricted behaviour include:
 - destructive Git commands such as `git reset --hard` and `git clean -f`;
 - download-and-execute command patterns such as `curl ... | sh`.
 
+## Install Without Git
+
+Users do not need to use Git if a packaged `.vsix` file is available from the GitHub Releases page.
+
+Recommended route for most users:
+
+1. Open the repository page in a browser.
+2. Go to `Releases`.
+3. Download the latest `iaedu-agent-*.vsix` file.
+4. Open VS Code.
+5. Open the Extensions view.
+6. Select `...` and choose `Install from VSIX...`.
+7. Select the downloaded `.vsix` file.
+8. Reload VS Code when prompted.
+
+The GitHub `Code` > `Download ZIP` option downloads the source code, not an installable extension package. It can still be used, but the user must build the `.vsix` locally:
+
+1. Download the repository ZIP from GitHub.
+2. Unzip it.
+3. Open a terminal in the unzipped folder.
+4. Run:
+
+```bash
+npm install
+npm run package
+```
+
+5. Install the generated `.vsix` file from VS Code with `Extensions` > `...` > `Install from VSIX...`.
+
+For non-technical users, publishing the `.vsix` as a GitHub Release asset is the simplest route.
+
+This repository includes a GitHub Actions workflow that builds and tests the extension, uploads the `.vsix` as a workflow artefact, and attaches it automatically to a published GitHub Release.
+
 ## Install From Source
 
 Requirements:
