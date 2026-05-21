@@ -10,13 +10,18 @@
   const sendButton = document.getElementById("send");
   const stopButton = document.getElementById("stop");
   const status = document.getElementById("status");
+  const modelSelect = document.getElementById("modelSelect");
   const loginButton = document.getElementById("login");
   const configPanel = document.getElementById("configPanel");
   const configForm = document.getElementById("configForm");
+  const configProfileSelect = document.getElementById("configProfileSelect");
+  const configProfileName = document.getElementById("configProfileName");
   const configEndpoint = document.getElementById("configEndpoint");
   const configChannelId = document.getElementById("configChannelId");
   const configApiKey = document.getElementById("configApiKey");
+  const configNewProfile = document.getElementById("configNewProfile");
   const configCancel = document.getElementById("configCancel");
+  const newProfileValue = "__new__";
 
   const md =
     typeof window.markdownit === "function"
@@ -61,27 +66,69 @@
     showConfigPanel();
   });
 
+  on(modelSelect, "change", () => {
+    if (!modelSelect || !modelSelect.value || busy) {
+      return;
+    }
+    if (lastSettings && modelSelect.value === lastSettings.modelProfileId) {
+      return;
+    }
+    vscode.postMessage({
+      type: "selectModelProfile",
+      profileId: modelSelect.value,
+    });
+  });
+
+  on(configProfileSelect, "change", () => {
+    if (!configProfileSelect) {
+      return;
+    }
+    if (configProfileSelect.value === newProfileValue) {
+      setConfigProfileNew();
+      return;
+    }
+    fillConfigFields(getProfile(configProfileSelect.value));
+  });
+
+  on(configNewProfile, "click", () => {
+    setConfigProfileNew();
+  });
+
   on(configCancel, "click", () => {
     hideConfigPanel();
   });
 
   on(configForm, "submit", (event) => {
     event.preventDefault();
+    const selectedProfileId =
+      configProfileSelect && configProfileSelect.value !== newProfileValue
+        ? configProfileSelect.value
+        : "";
+    const existingProfile = selectedProfileId
+      ? getProfile(selectedProfileId)
+      : undefined;
+    const profileName = configProfileName ? configProfileName.value.trim() : "";
     const endpoint = configEndpoint ? configEndpoint.value.trim() : "";
-    const channelId = configChannelId ? configChannelId.value.trim() : "";
     const apiKey = configApiKey ? configApiKey.value.trim() : "";
+    const channelId = configChannelId ? configChannelId.value.trim() : "";
 
-    if (!endpoint || !channelId) {
-      setStatus("Enter the endpoint and channel_id.");
-      if (!endpoint && configEndpoint) {
-        configEndpoint.focus();
-      } else if (configChannelId) {
-        configChannelId.focus();
+    if (!profileName) {
+      setStatus("Enter a model name.");
+      if (configProfileName) {
+        configProfileName.focus();
       }
       return;
     }
 
-    if (!apiKey && !(lastSettings && lastSettings.hasApiKey)) {
+    if (!endpoint) {
+      setStatus("Enter the endpoint.");
+      if (configEndpoint) {
+        configEndpoint.focus();
+      }
+      return;
+    }
+
+    if (!apiKey && !(existingProfile && existingProfile.hasApiKey)) {
       setStatus("Enter the API key.");
       if (configApiKey) {
         configApiKey.focus();
@@ -89,11 +136,21 @@
       return;
     }
 
+    if (!channelId) {
+      setStatus("Enter the Channel ID.");
+      if (configChannelId) {
+        configChannelId.focus();
+      }
+      return;
+    }
+
     vscode.postMessage({
       type: "saveSettings",
+      profileId: selectedProfileId,
+      profileName,
       endpoint,
-      channelId,
       apiKey,
+      channelId,
     });
   });
 
@@ -119,6 +176,7 @@
     const message = event.data;
     if (message.type === "settings") {
       lastSettings = message;
+      renderModelSelect(message);
       if (includeActiveFile) {
         includeActiveFile.checked = Boolean(message.defaultIncludeActiveFile);
       }
@@ -170,11 +228,25 @@
   function createAssistantMessage(id) {
     const wrapper = document.createElement("article");
     wrapper.className = "message assistant";
+    const tools = document.createElement("div");
+    tools.className = "message-tools";
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = "copy-message";
+    copyButton.textContent = "copy";
+    copyButton.title = "Copy response";
+    copyButton.disabled = true;
+    tools.appendChild(copyButton);
+    wrapper.appendChild(tools);
     const body = document.createElement("div");
     body.className = "message-body";
     wrapper.appendChild(body);
     messages.appendChild(wrapper);
-    assistantMessages.set(id, { text: "", body, wrapper });
+    const item = { text: "", body, wrapper, copyButton };
+    copyButton.addEventListener("click", () => {
+      copyAssistantText(stripLocalActionBlocks(item.text), copyButton);
+    });
+    assistantMessages.set(id, item);
     scrollBottom();
   }
 
@@ -184,7 +256,7 @@
       return;
     }
     item.text += delta;
-    render(item.body, item.text);
+    renderAssistantItem(item);
     scrollBottom();
   }
 
@@ -193,11 +265,26 @@
     if (!item) {
       return;
     }
+    renderAssistantItem(item);
     if (actions.length > 0) {
       item.wrapper.appendChild(renderActions(actions));
     }
     assistantMessages.delete(id);
     scrollBottom();
+  }
+
+  function copyAssistantText(text, button) {
+    const value = text || "";
+    if (!value.trim()) {
+      return;
+    }
+    vscode.postMessage({ type: "copyText", text: value });
+    if (button) {
+      button.textContent = "copied";
+      window.setTimeout(() => {
+        button.textContent = "copy";
+      }, 1200);
+    }
   }
 
   function renderActions(actions) {
@@ -235,13 +322,47 @@
     if (action.type === "writeFile") {
       return `file: ${action.path}`;
     }
+    if (action.type === "appendFile") {
+      return `append: ${action.path}`;
+    }
     if (action.type === "replaceSelection") {
       return "replace selection";
     }
     if (action.type === "runCommand") {
-      return `command: ${action.command}`;
+      return commandSummary(action.command);
     }
     return "local action";
+  }
+
+  function commandSummary(command) {
+    const firstToken = String(command || "").trim().split(/\s+/)[0];
+    return firstToken ? `run command: ${firstToken}` : "run command";
+  }
+
+  function renderAssistantItem(item) {
+    const visibleText = stripLocalActionBlocks(item.text);
+    item.copyButton.disabled = visibleText.trim().length === 0;
+    render(item.body, visibleText);
+  }
+
+  function stripLocalActionBlocks(text) {
+    const source = text || "";
+    const startPattern = /```(?:iaedu-action|iaedu-actions)\b[^\n]*\n?/gi;
+    let result = "";
+    let cursor = 0;
+    let match;
+    while ((match = startPattern.exec(source)) !== null) {
+      result += source.slice(cursor, match.index);
+      const endIndex = source.indexOf("```", startPattern.lastIndex);
+      if (endIndex < 0) {
+        cursor = source.length;
+        break;
+      }
+      cursor = endIndex + 3;
+      startPattern.lastIndex = cursor;
+    }
+    result += source.slice(cursor);
+    return result.replace(/\n{3,}/g, "\n\n").trim();
   }
 
   function render(element, text) {
@@ -409,6 +530,9 @@
     if (prompt) {
       prompt.disabled = value;
     }
+    if (modelSelect) {
+      modelSelect.disabled = value || getProfiles().length === 0;
+    }
   }
 
   function setConfigured(configured, settings) {
@@ -427,10 +551,10 @@
       const shortEndpoint =
         endpoint.length > 44 ? `${endpoint.slice(0, 41)}...` : endpoint;
       setStatus(
-        `connected | channel: ${settings.channelId || "-"} | ${shortEndpoint} | thread: ${settings.threadId}`,
+        `connected | model: ${settings.modelName || "-"} | channel: ${settings.channelId || "-"} | ${shortEndpoint} | thread: ${settings.threadId}`,
       );
     } else {
-      setStatus("not signed in: set endpoint, channel_id and API key");
+      setStatus("not signed in: set a model profile, endpoint, Channel ID and API key");
     }
   }
 
@@ -510,6 +634,8 @@
     }
     if (options.focusApiKey && configApiKey) {
       configApiKey.focus();
+    } else if (configProfileName && configProfileSelect && configProfileSelect.value === newProfileValue) {
+      configProfileName.focus();
     } else if (configEndpoint) {
       configEndpoint.focus();
     }
@@ -531,18 +657,111 @@
     if (!settings) {
       return;
     }
+    renderConfigProfileOptions(settings);
+    const profiles = getProfiles(settings);
+    const activeProfile =
+      getProfile(settings.modelProfileId) ||
+      (profiles.length > 0
+        ? {
+            id: settings.modelProfileId || "",
+            name: settings.modelName || "",
+            endpoint: settings.endpoint || "",
+            channelId: settings.channelId || "",
+            hasApiKey: Boolean(settings.hasApiKey),
+          }
+        : undefined);
+    fillConfigFields(activeProfile);
+  }
+
+  function fillConfigFields(profile) {
+    if (configProfileName) {
+      configProfileName.value = profile ? profile.name || "" : "";
+    }
     if (configEndpoint) {
-      configEndpoint.value = settings.endpoint || "";
+      configEndpoint.value = profile ? profile.endpoint || "" : "";
     }
     if (configChannelId) {
-      configChannelId.value = settings.channelId || "";
+      configChannelId.value = profile ? profile.channelId || "" : "";
     }
     if (configApiKey) {
       configApiKey.value = "";
-      configApiKey.placeholder = settings.hasApiKey
+      configApiKey.placeholder = profile && profile.hasApiKey
         ? "keep saved key"
         : "API key";
     }
+  }
+
+  function renderModelSelect(settings) {
+    if (!modelSelect) {
+      return;
+    }
+    replaceOptions(modelSelect, []);
+    const profiles = getProfiles(settings);
+    if (profiles.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No model";
+      modelSelect.appendChild(option);
+      modelSelect.disabled = true;
+      return;
+    }
+
+    profiles.forEach((profile) => {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = profile.name || profile.id;
+      modelSelect.appendChild(option);
+    });
+    modelSelect.value = settings.modelProfileId || profiles[0].id;
+    modelSelect.disabled = busy;
+  }
+
+  function renderConfigProfileOptions(settings) {
+    if (!configProfileSelect) {
+      return;
+    }
+    replaceOptions(configProfileSelect, []);
+    const profiles = getProfiles(settings);
+    profiles.forEach((profile) => {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = profile.name || profile.id;
+      configProfileSelect.appendChild(option);
+    });
+
+    const newOption = document.createElement("option");
+    newOption.value = newProfileValue;
+    newOption.textContent = "Add new model";
+    configProfileSelect.appendChild(newOption);
+    configProfileSelect.value = profiles.some(
+      (profile) => profile.id === settings.modelProfileId,
+    )
+      ? settings.modelProfileId
+      : newProfileValue;
+  }
+
+  function setConfigProfileNew() {
+    if (configProfileSelect) {
+      configProfileSelect.value = newProfileValue;
+    }
+    fillConfigFields(undefined);
+    if (configProfileName) {
+      configProfileName.focus();
+    }
+  }
+
+  function getProfile(profileId) {
+    return getProfiles().find((profile) => profile.id === profileId);
+  }
+
+  function getProfiles(settings = lastSettings) {
+    return settings && Array.isArray(settings.modelProfiles)
+      ? settings.modelProfiles
+      : [];
+  }
+
+  function replaceOptions(select, options) {
+    select.replaceChildren(...options);
   }
 
   function isConfigPanelOpen() {

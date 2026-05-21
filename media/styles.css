@@ -15,7 +15,8 @@ body {
 
 button,
 textarea,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -52,7 +53,7 @@ input {
 
 .config-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr 1.2fr;
+  grid-template-columns: 1.1fr 1.2fr minmax(220px, 2fr) minmax(120px, 1fr) minmax(140px, 1.2fr);
   gap: 8px;
 }
 
@@ -64,7 +65,8 @@ input {
   min-width: 0;
 }
 
-.config-field input {
+.config-field input,
+.config-field select {
   width: 100%;
   min-width: 0;
   color: var(--vscode-input-foreground);
@@ -74,7 +76,8 @@ input {
   padding: 6px 8px;
 }
 
-.config-field input:focus {
+.config-field input:focus,
+.config-field select:focus {
   outline: 1px solid var(--vscode-focusBorder);
 }
 
@@ -103,6 +106,24 @@ input {
   padding: 1px 7px;
   font-size: 11px;
   line-height: 18px;
+}
+
+.message-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 4px;
+}
+
+.copy-message {
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  background: var(--vscode-button-secondaryBackground, var(--vscode-input-background));
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.copy-message:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
 }
 
 .message-body {
@@ -179,6 +200,10 @@ textarea:focus {
   flex: 1 1 380px;
 }
 
+.toolbar-model {
+  flex: 0 1 180px;
+}
+
 .toolbar-config,
 .toolbar-session {
   flex: 0 1 auto;
@@ -236,6 +261,17 @@ textarea:focus {
   background: var(--vscode-button-background);
 }
 
+.toolbar-model select {
+  width: 100%;
+  min-width: 130px;
+  max-width: 220px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 5px;
+  padding: 5px 8px;
+}
+
 button {
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
@@ -267,12 +303,14 @@ button:disabled {
   cursor: default;
 }
 
-#configCancel {
+#configCancel,
+#configNewProfile {
   color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
   background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
 }
 
-#configCancel:hover {
+#configCancel:hover,
+#configNewProfile:hover {
   background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
 }
 

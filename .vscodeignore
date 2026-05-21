@@ -1,4 +1,8 @@
 .vscode/**
+.github/**
+AGENTS.md
+IAEDU.md
+.gitignore
 .env
 .env.*
 !.env.example
@@ -6,6 +10,15 @@ src/**
 test/**
 tsconfig.json
 *.vsix
+*.do
+*.bak
+*.log
+*.dta
+*.gph
+hist_auto_price.png
+mpg_density.png
+image*.png
+images/**
 node_modules/.cache/**
 node_modules/@types/**
 node_modules/typescript/**

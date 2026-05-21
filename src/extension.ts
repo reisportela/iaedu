@@ -8,12 +8,18 @@ import {
   isConfigured,
   logout,
   saveConnectionSettings,
+  selectModelProfile,
   setApiKey,
   setChannelId,
   setEndpoint,
   startNewThread,
 } from "./config";
-import { buildPrompt, getEditorContext, IaeduMode } from "./editorContext";
+import {
+  buildPrompt,
+  getEditorContext,
+  getWorkspaceInstructions,
+  IaeduMode,
+} from "./editorContext";
 import { sendIaeduMessage } from "./iaeduClient";
 
 let activeProvider: IAEduChatViewProvider | undefined;
@@ -67,8 +73,12 @@ export function activate(context: vscode.ExtensionContext) {
       await logout(context);
       chatProvider.refreshSettings();
     }),
-    vscode.commands.registerCommand("iaedu.setEndpoint", () => setEndpoint()),
-    vscode.commands.registerCommand("iaedu.setChannelId", () => setChannelId()),
+    vscode.commands.registerCommand("iaedu.selectModelProfile", async () => {
+      await selectModelProfile(context);
+      chatProvider.refreshSettings();
+    }),
+    vscode.commands.registerCommand("iaedu.setEndpoint", () => setEndpoint(context)),
+    vscode.commands.registerCommand("iaedu.setChannelId", () => setChannelId(context)),
     vscode.commands.registerCommand("iaedu.importDotEnv", () =>
       importDotEnv(context),
     ),
@@ -202,17 +212,22 @@ class IAEduChatSession {
     const editorContext = contextMode
       ? getEditorContext(contextMode, settings.maxContextChars)
       : undefined;
+    const workspaceInstructions = await getWorkspaceInstructions(
+      settings.maxContextChars,
+    );
     const userContext = {
       source: "vscode-extension",
       workspace: vscode.workspace.name,
       mode,
       autoAcceptActions,
+      workspaceInstructions: workspaceInstructions?.userContext,
       ...editorContext?.userContext,
     };
     const prompt = buildPrompt(
       userPrompt,
       editorContext?.text,
       mode,
+      workspaceInstructions?.text,
     );
     const assistantId = `assistant-${Date.now()}`;
     this.abortController = new AbortController();
@@ -305,14 +320,22 @@ class IAEduChatSession {
 
     if (message.type === "saveSettings") {
       const saved = await saveConnectionSettings(this.context, {
+        profileId: message.profileId,
+        profileName: message.profileName,
         endpoint: message.endpoint,
-        channelId: message.channelId,
         apiKey: message.apiKey,
+        channelId: message.channelId,
       });
       await this.refreshSettings();
       if (saved) {
         this.webview.postMessage({ type: "hideConfig" });
       }
+      return;
+    }
+
+    if (message.type === "selectModelProfile") {
+      await selectModelProfile(this.context, message.profileId, { silent: true });
+      await this.refreshSettings();
       return;
     }
 
@@ -337,6 +360,12 @@ class IAEduChatSession {
       return;
     }
 
+    if (message.type === "copyText") {
+      await vscode.env.clipboard.writeText(message.text);
+      this.webview.postMessage({ type: "status", text: "Response copied." });
+      return;
+    }
+
     if (message.type === "applyAction") {
       const result = await applyLocalAction(message.action, this.output);
       this.webview.postMessage({ type: "status", text: result.message });
@@ -351,7 +380,7 @@ class IAEduChatSession {
       return actions;
     }
 
-    const maxAutoActions = 5;
+    const maxAutoActions = 10;
     if (actions.length > maxAutoActions) {
       this.webview.postMessage({
         type: "status",
@@ -421,22 +450,31 @@ class IAEduChatSession {
 	  <main class="app">
 	    <section id="configPanel" class="config-panel" hidden>
 	      <form id="configForm" class="config-form">
-		        <div class="config-title">IAEDU connection settings</div>
+		        <div class="config-title">IAEDU model settings</div>
 	        <div class="config-grid">
 	          <label class="config-field">
-	            <span>endpoint</span>
-	            <input id="configEndpoint" type="url" placeholder="https://api.iaedu.pt/agent-chat/...">
+	            <span>Saved model</span>
+	            <select id="configProfileSelect"></select>
 	          </label>
 	          <label class="config-field">
-	            <span>channel_id</span>
-	            <input id="configChannelId" type="text" autocomplete="off">
+	            <span>Model name</span>
+	            <input id="configProfileName" type="text" autocomplete="off" placeholder="e.g. GPT-4.1 agent">
+	          </label>
+	          <label class="config-field">
+	            <span>Endpoint</span>
+	            <input id="configEndpoint" type="url" placeholder="https://api.iaedu.pt/agent-chat/...">
 	          </label>
 	          <label class="config-field">
 	            <span>API key</span>
 		            <input id="configApiKey" type="password" autocomplete="off" placeholder="keep saved key">
 	          </label>
+	          <label class="config-field">
+	            <span>Channel ID</span>
+	            <input id="configChannelId" type="text" autocomplete="off">
+	          </label>
 		        </div>
 		        <div class="config-actions">
+		          <button id="configNewProfile" type="button">new model</button>
 		          <button id="configCancel" type="button">cancel</button>
 		          <button id="configSave" type="submit">save</button>
 		        </div>
@@ -469,6 +507,9 @@ class IAEduChatSession {
 	            <input id="autoAcceptActions" type="checkbox">
 	            <span>auto-accept</span>
 	          </label>
+	        </div>
+	        <div class="toolbar-group toolbar-model" aria-label="Model">
+	          <select id="modelSelect" title="IAEDU model"></select>
 	        </div>
 	        <div class="toolbar-group toolbar-config" aria-label="Settings">
 	          <button id="login" type="button">config</button>
@@ -509,6 +550,9 @@ class IAEduChatSession {
       endpoint: settings.endpoint,
       channelId: settings.channelId,
       hasApiKey: Boolean(settings.apiKey),
+      modelProfileId: settings.modelProfileId,
+      modelName: settings.modelName,
+      modelProfiles: settings.modelProfiles,
       defaultIncludeActiveFile: settings.defaultIncludeActiveFile,
       defaultMode: settings.defaultMode,
       threadId: settings.threadId,
@@ -530,13 +574,17 @@ type WebviewMessage =
   | { type: "login" }
   | {
       type: "saveSettings";
+      profileId?: string;
+      profileName: string;
       endpoint: string;
-      channelId: string;
       apiKey: string;
+      channelId: string;
     }
+  | { type: "selectModelProfile"; profileId: string }
   | { type: "logout" }
   | { type: "importDotEnv" }
   | { type: "newThread" }
+  | { type: "copyText"; text: string }
   | { type: "applyAction"; action: LocalAction };
 
 function getNonce() {

@@ -2,8 +2,9 @@
   "name": "iaedu-agent",
   "displayName": "IAEDU Agent for VS Code",
   "description": "VS Code chat and local agent bridge for the IAEDU agent API.",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "publisher": "iaedu-community",
+  "author": "Miguel Portela, Universidade do Minho <miguel.portela@eeg.uminho.pt>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -30,8 +31,9 @@
     "onCommand:iaedu.askActiveFile",
     "onCommand:iaedu.login",
     "onCommand:iaedu.logout",
-    "onCommand:iaedu.setApiKey",
+    "onCommand:iaedu.selectModelProfile",
     "onCommand:iaedu.setEndpoint",
+    "onCommand:iaedu.setApiKey",
     "onCommand:iaedu.setChannelId",
     "onCommand:iaedu.importDotEnv",
     "onCommand:iaedu.clearThread",
@@ -71,10 +73,6 @@
         "title": "IAEDU: Ask About Active File"
       },
       {
-        "command": "iaedu.setApiKey",
-        "title": "IAEDU: Set API Key"
-      },
-      {
         "command": "iaedu.login",
         "title": "IAEDU: Sign In / Configure API"
       },
@@ -83,8 +81,16 @@
         "title": "IAEDU: Sign Out"
       },
       {
+        "command": "iaedu.selectModelProfile",
+        "title": "IAEDU: Select Model"
+      },
+      {
         "command": "iaedu.setEndpoint",
         "title": "IAEDU: Set Endpoint"
+      },
+      {
+        "command": "iaedu.setApiKey",
+        "title": "IAEDU: Set API Key"
       },
       {
         "command": "iaedu.setChannelId",
@@ -110,7 +116,45 @@
         "iaedu.channelId": {
           "type": "string",
           "default": "",
-          "description": "IAEDU channel_id value."
+          "description": "Legacy IAEDU Channel ID for the active or default model profile."
+        },
+        "iaedu.activeModelProfileId": {
+          "type": "string",
+          "default": "",
+          "description": "Identifier of the active IAEDU model profile."
+        },
+        "iaedu.modelProfiles": {
+          "type": "array",
+          "default": [],
+          "description": "Saved IAEDU model profiles. API keys are stored separately in VS Code SecretStorage.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "endpoint",
+              "channelId"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable local identifier for this model profile."
+              },
+              "name": {
+                "type": "string",
+                "description": "Display name for this model profile."
+              },
+              "endpoint": {
+                "type": "string",
+                "description": "IAEDU agent-chat endpoint URL for this model profile."
+              },
+              "channelId": {
+                "type": "string",
+                "description": "IAEDU Channel ID for this model profile."
+              }
+            }
+          }
         },
         "iaedu.userInfo": {
           "type": "string",
@@ -160,16 +204,19 @@
           "command": "iaedu.askActiveFile"
         },
         {
-          "command": "iaedu.setApiKey"
-        },
-        {
           "command": "iaedu.login"
         },
         {
           "command": "iaedu.logout"
         },
         {
+          "command": "iaedu.selectModelProfile"
+        },
+        {
           "command": "iaedu.setEndpoint"
+        },
+        {
+          "command": "iaedu.setApiKey"
         },
         {
           "command": "iaedu.setChannelId"
