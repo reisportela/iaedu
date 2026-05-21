@@ -1,0 +1,203 @@
+{
+  "name": "iaedu-agent",
+  "displayName": "IAEDU Agent for VS Code",
+  "description": "VS Code chat and local agent bridge for the IAEDU agent API.",
+  "version": "0.1.10",
+  "publisher": "iaedu-community",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reisportela/iaedu.git"
+  },
+  "homepage": "https://github.com/reisportela/iaedu#readme",
+  "bugs": {
+    "url": "https://github.com/reisportela/iaedu/issues"
+  },
+  "icon": "media/iaedu-icon.png",
+  "extensionKind": [
+    "ui"
+  ],
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:iaedu.openChat",
+    "onCommand:iaedu.askSelection",
+    "onCommand:iaedu.askActiveFile",
+    "onCommand:iaedu.login",
+    "onCommand:iaedu.logout",
+    "onCommand:iaedu.setApiKey",
+    "onCommand:iaedu.setEndpoint",
+    "onCommand:iaedu.setChannelId",
+    "onCommand:iaedu.importDotEnv",
+    "onCommand:iaedu.clearThread",
+    "onView:iaedu.chatView"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "iaeduAgent",
+          "title": "IAEDU",
+          "icon": "media/iaedu-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "iaeduAgent": [
+        {
+          "id": "iaedu.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "iaedu.openChat",
+        "title": "IAEDU: Open Chat"
+      },
+      {
+        "command": "iaedu.askSelection",
+        "title": "IAEDU: Ask About Selection"
+      },
+      {
+        "command": "iaedu.askActiveFile",
+        "title": "IAEDU: Ask About Active File"
+      },
+      {
+        "command": "iaedu.setApiKey",
+        "title": "IAEDU: Set API Key"
+      },
+      {
+        "command": "iaedu.login",
+        "title": "IAEDU: Sign In / Configure API"
+      },
+      {
+        "command": "iaedu.logout",
+        "title": "IAEDU: Sign Out"
+      },
+      {
+        "command": "iaedu.setEndpoint",
+        "title": "IAEDU: Set Endpoint"
+      },
+      {
+        "command": "iaedu.setChannelId",
+        "title": "IAEDU: Set Channel ID"
+      },
+      {
+        "command": "iaedu.importDotEnv",
+        "title": "IAEDU: Import Settings from .env"
+      },
+      {
+        "command": "iaedu.clearThread",
+        "title": "IAEDU: Start New Thread"
+      }
+    ],
+    "configuration": {
+      "title": "IAEDU Agent",
+      "properties": {
+        "iaedu.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "IAEDU agent-chat endpoint URL."
+        },
+        "iaedu.channelId": {
+          "type": "string",
+          "default": "",
+          "description": "IAEDU channel_id value."
+        },
+        "iaedu.userInfo": {
+          "type": "string",
+          "default": "{\"source\":\"vscode-extension\"}",
+          "description": "JSON string sent as user_info."
+        },
+        "iaedu.maxContextChars": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 1000,
+          "maximum": 200000,
+          "description": "Maximum characters from the active editor sent as context."
+        },
+        "iaedu.defaultIncludeActiveFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include the active file as context by default in the chat panel."
+        },
+        "iaedu.defaultMode": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "plan",
+            "agent"
+          ],
+          "default": "ask",
+          "description": "Default IAEDU chat mode in the panel."
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "iaedu.askSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@60"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "iaedu.openChat"
+        },
+        {
+          "command": "iaedu.askSelection"
+        },
+        {
+          "command": "iaedu.askActiveFile"
+        },
+        {
+          "command": "iaedu.setApiKey"
+        },
+        {
+          "command": "iaedu.login"
+        },
+        {
+          "command": "iaedu.logout"
+        },
+        {
+          "command": "iaedu.setEndpoint"
+        },
+        {
+          "command": "iaedu.setChannelId"
+        },
+        {
+          "command": "iaedu.importDotEnv"
+        },
+        {
+          "command": "iaedu.clearThread"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test test/*.test.mjs",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "katex": "^0.16.25",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/vscode": "^1.100.0",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "^5.9.3"
+  }
+}

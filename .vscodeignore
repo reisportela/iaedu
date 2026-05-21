@@ -1,0 +1,12 @@
+.vscode/**
+.env
+.env.*
+!.env.example
+src/**
+test/**
+tsconfig.json
+*.vsix
+node_modules/.cache/**
+node_modules/@types/**
+node_modules/typescript/**
+node_modules/@vscode/**

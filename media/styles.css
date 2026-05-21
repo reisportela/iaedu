@@ -1,0 +1,344 @@
+:root {
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+}
+
+.messages {
+  overflow: auto;
+  padding: 18px 18px 24px;
+}
+
+.config-panel {
+  border-bottom: 1px solid var(--vscode-panel-border);
+  padding: 12px 14px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.config-panel[hidden] {
+  display: none;
+}
+
+.config-form {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.config-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.2fr;
+  gap: 8px;
+}
+
+.config-field {
+  display: grid;
+  gap: 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.config-field input {
+  width: 100%;
+  min-width: 0;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 5px;
+  padding: 6px 8px;
+}
+
+.config-field input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.message {
+  max-width: 980px;
+  margin: 0 auto 14px;
+}
+
+.message-meta {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+
+.message-meta span {
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-badge-background);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.message-body {
+  line-height: 1.55;
+  border: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editorWidget-background);
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.message.user .message-body {
+  background: var(--vscode-input-background);
+  border-color: var(--vscode-focusBorder);
+}
+
+.message.error .message-body {
+  color: var(--vscode-errorForeground);
+  border-color: var(--vscode-inputValidation-errorBorder);
+}
+
+.message-body pre {
+  overflow: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--vscode-textCodeBlock-background);
+}
+
+.message-body code {
+  font-family: var(--vscode-editor-font-family);
+}
+
+.message-body img {
+  max-width: 100%;
+}
+
+.composer {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding: 12px 14px 10px;
+  background: var(--vscode-sideBar-background);
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 82px;
+  max-height: 220px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+textarea:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.toolbar-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-context {
+  flex: 1 1 380px;
+}
+
+.toolbar-config,
+.toolbar-session {
+  flex: 0 1 auto;
+}
+
+.toolbar-run {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  min-height: 30px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 6px;
+  padding: 2px;
+  background: var(--vscode-input-background);
+}
+
+.mode-switch label {
+  position: relative;
+  display: inline-flex;
+}
+
+.mode-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mode-switch span {
+  color: var(--vscode-input-foreground);
+  border-radius: 4px;
+  padding: 4px 8px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.mode-switch input:focus-visible + span {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.mode-switch input:checked + span {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+button {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.toolbar-config button,
+.toolbar-session button,
+#stop {
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  background: var(--vscode-button-secondaryBackground, var(--vscode-input-background));
+}
+
+.toolbar-config button:hover,
+.toolbar-session button:hover,
+#stop:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+#configCancel {
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+}
+
+#configCancel:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+}
+
+.auto-accept[data-enabled="false"] {
+  opacity: 0.55;
+}
+
+.status {
+  min-height: 18px;
+  margin-top: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.actions {
+  max-width: 980px;
+  margin: -8px auto 14px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.actions-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.action-row {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.action-row span {
+  overflow-wrap: anywhere;
+}
+
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.iaedu-math-inline {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: baseline;
+}
+
+.iaedu-math-display {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+
+.iaedu-math-display .katex-display {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+}
