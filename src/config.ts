@@ -2,6 +2,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { IaeduMode } from "./editorContext";
+import {
+  DEFAULT_MODEL_CONFIG_PATH,
+  ModelConfigFileEntry,
+  readModelConfigFile,
+  resolveModelConfigPath,
+  upsertModelConfigFileEntry,
+  writeModelConfigFile,
+} from "./modelConfigFile";
 
 const LEGACY_API_KEY_SECRET = "iaedu.apiKey";
 const API_KEY_SECRET_PREFIX = "iaedu.apiKey.profile.";
@@ -9,6 +17,9 @@ const LEGACY_THREAD_ID_STATE = "iaedu.threadId";
 const THREAD_ID_STATE_PREFIX = "iaedu.threadId.profile.";
 const MODEL_PROFILES_CONFIG = "modelProfiles";
 const ACTIVE_MODEL_PROFILE_CONFIG = "activeModelProfileId";
+const MODEL_CONFIG_PATH_CONFIG = "modelConfigPath";
+const ACTIVE_MODEL_PROFILE_STATE = "iaedu.activeModelProfileId";
+const MODEL_CONFIG_FILE_IGNORED_STATE = "iaedu.modelConfigFileIgnored";
 const LEGACY_PROFILE_ID = "default";
 const DEFAULT_PROFILE_NAME = "Default model";
 
@@ -56,7 +67,7 @@ export async function getSettings(
 ): Promise<IaeduSettings> {
   const config = vscode.workspace.getConfiguration("iaedu");
   const profiles = await getStoredModelProfiles(context);
-  const activeProfile = resolveActiveProfile(config, profiles);
+  const activeProfile = resolveActiveProfile(context, config, profiles);
   const profileId = activeProfile?.id || LEGACY_PROFILE_ID;
   const userInfo = normalizeJsonString(
     config.get<string>("userInfo", "{\"source\":\"vscode-extension\"}"),
@@ -218,19 +229,23 @@ export async function saveConnectionSettings(
     endpoint,
     channelId,
   };
-  const nextProfiles = upsertModelProfile(profiles, profile);
-  const config = vscode.workspace.getConfiguration("iaedu");
 
-  await config.update(
-    MODEL_PROFILES_CONFIG,
-    nextProfiles,
-    vscode.ConfigurationTarget.Workspace,
-  );
-  await setActiveModelProfileConfig(config, profile);
+  try {
+    await saveModelConfigProfile(context, profile, apiKey || existingApiKey);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showWarningMessage(
+      `Could not save IAEDU model config file: ${message}`,
+    );
+    return undefined;
+  }
 
   if (apiKey) {
     await context.secrets.store(apiKeySecret(profile.id), apiKey);
   }
+
+  await setActiveModelProfile(context, profile.id);
+  await context.workspaceState.update(MODEL_CONFIG_FILE_IGNORED_STATE, false);
 
   const next = await getSettings(context);
   if (requireApiKey && !next.apiKey) {
@@ -281,10 +296,7 @@ export async function selectModelProfile(
     return undefined;
   }
 
-  await setActiveModelProfileConfig(
-    vscode.workspace.getConfiguration("iaedu"),
-    profile,
-  );
+  await setActiveModelProfile(context, profile.id);
   if (!options.silent) {
     vscode.window.showInformationMessage(`IAEDU model selected: ${profile.name}.`);
   }
@@ -315,12 +327,16 @@ export async function logout(context: vscode.ExtensionContext): Promise<void> {
     await context.secrets.delete(apiKeySecret(profile.id));
   }
 
-  await config.update(MODEL_PROFILES_CONFIG, [], vscode.ConfigurationTarget.Workspace);
-  await config.update(ACTIVE_MODEL_PROFILE_CONFIG, "", vscode.ConfigurationTarget.Workspace);
-  await config.update("endpoint", "", vscode.ConfigurationTarget.Workspace);
-  await config.update("channelId", "", vscode.ConfigurationTarget.Workspace);
+  await config.update(MODEL_PROFILES_CONFIG, undefined, vscode.ConfigurationTarget.Workspace);
+  await config.update(ACTIVE_MODEL_PROFILE_CONFIG, undefined, vscode.ConfigurationTarget.Workspace);
+  await config.update("endpoint", undefined, vscode.ConfigurationTarget.Workspace);
+  await config.update("channelId", undefined, vscode.ConfigurationTarget.Workspace);
+  await context.workspaceState.update(ACTIVE_MODEL_PROFILE_STATE, undefined);
+  await context.workspaceState.update(MODEL_CONFIG_FILE_IGNORED_STATE, true);
   startNewThread(context, LEGACY_PROFILE_ID);
-  vscode.window.showInformationMessage("IAEDU signed out and model profiles were cleared.");
+  vscode.window.showInformationMessage(
+    `IAEDU signed out in this workspace. The model config file was kept at ${getModelConfigFilePath()}.`,
+  );
 }
 
 export async function setEndpoint(context: vscode.ExtensionContext): Promise<void> {
@@ -406,18 +422,74 @@ export async function importDotEnv(
   vscode.window.showInformationMessage("IAEDU settings imported from .env.");
 }
 
+export async function loadModelConfigFile(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  const entries = readEnabledModelConfigFileEntries();
+  if (entries.length === 0) {
+    vscode.window.showWarningMessage(
+      `Could not find IAEDU model profiles in ${getModelConfigFilePath()}.`,
+    );
+    return;
+  }
+
+  await context.workspaceState.update(MODEL_CONFIG_FILE_IGNORED_STATE, false);
+  const currentActiveProfileId = getActiveModelProfileId(
+    context,
+    vscode.workspace.getConfiguration("iaedu"),
+  );
+  if (!entries.some((entry) => entry.id === currentActiveProfileId)) {
+    await setActiveModelProfile(context, entries[0].id);
+  }
+
+  for (const entry of entries) {
+    if (entry.apiKey) {
+      await context.secrets.store(apiKeySecret(entry.id), entry.apiKey);
+    }
+  }
+
+  vscode.window.showInformationMessage(
+    `Loaded ${entries.length} IAEDU model profile(s) from ${getModelConfigFilePath()}.`,
+  );
+}
+
+export async function saveModelConfigFile(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  const profiles = await getStoredModelProfiles(context, { includeIgnoredFile: true });
+  if (profiles.length === 0) {
+    vscode.window.showWarningMessage("No IAEDU model profiles are configured.");
+    return;
+  }
+
+  const entries = await Promise.all(
+    profiles.map(async (profile) => ({
+      ...profile,
+      apiKey: await getProfileApiKey(context, profile.id, {
+        includeIgnoredFile: true,
+      }),
+    })),
+  );
+  writeModelConfigFile(getModelConfigFilePath(), entries);
+  await context.workspaceState.update(MODEL_CONFIG_FILE_IGNORED_STATE, false);
+  vscode.window.showInformationMessage(
+    `Saved ${entries.length} IAEDU model profile(s) to ${getModelConfigFilePath()}.`,
+  );
+}
+
 export function startNewThread(
   context: vscode.ExtensionContext,
   profileId?: string,
 ): string {
-  const resolvedProfileId =
-    profileId ||
-    vscode.workspace
-      .getConfiguration("iaedu")
-      .get<string>(ACTIVE_MODEL_PROFILE_CONFIG, "")
-      .trim() ||
-    LEGACY_PROFILE_ID;
-  const threadId = makeThreadId();
+  return setThreadId(context, makeThreadId(), profileId);
+}
+
+export function setThreadId(
+  context: vscode.ExtensionContext,
+  threadId: string,
+  profileId?: string,
+): string {
+  const resolvedProfileId = resolveThreadProfileId(context, profileId);
   context.workspaceState.update(threadIdStateKey(resolvedProfileId), threadId);
   return threadId;
 }
@@ -436,17 +508,33 @@ export function getOrCreateThreadId(
 }
 
 function resolveActiveProfile(
+  context: vscode.ExtensionContext,
   config: vscode.WorkspaceConfiguration,
   profiles: IaeduModelProfile[],
 ): IaeduModelProfile | undefined {
-  const activeProfileId = config
-    .get<string>(ACTIVE_MODEL_PROFILE_CONFIG, "")
-    .trim();
+  const activeProfileId = getActiveModelProfileId(context, config);
   return (
     profiles.find((profile) => profile.id === activeProfileId) ||
     profiles[0] ||
     undefined
   );
+}
+
+function getActiveModelProfileId(
+  context: vscode.ExtensionContext,
+  config: vscode.WorkspaceConfiguration,
+): string {
+  return (
+    context.workspaceState.get<string>(ACTIVE_MODEL_PROFILE_STATE, "") ||
+    config.get<string>(ACTIVE_MODEL_PROFILE_CONFIG, "")
+  ).trim();
+}
+
+async function setActiveModelProfile(
+  context: vscode.ExtensionContext,
+  profileId: string,
+): Promise<void> {
+  await context.workspaceState.update(ACTIVE_MODEL_PROFILE_STATE, profileId);
 }
 
 async function chooseModelProfileForConfiguration(
@@ -482,8 +570,16 @@ async function chooseModelProfileForConfiguration(
 
 async function getStoredModelProfiles(
   context: vscode.ExtensionContext,
+  options: { includeIgnoredFile?: boolean } = {},
 ): Promise<IaeduModelProfile[]> {
   const config = vscode.workspace.getConfiguration("iaedu");
+  const fileProfiles = getModelConfigFileEntries(context, options).map(
+    modelConfigEntryToProfile,
+  );
+  if (fileProfiles.length > 0) {
+    return fileProfiles;
+  }
+
   const profiles = normalizeModelProfiles(config.get<unknown>(MODEL_PROFILES_CONFIG, []));
   if (profiles.length > 0) {
     return profiles;
@@ -496,6 +592,43 @@ async function getStoredModelProfiles(
   }
 
   return [];
+}
+
+function getModelConfigFileEntries(
+  context: vscode.ExtensionContext,
+  options: { includeIgnoredFile?: boolean } = {},
+): ModelConfigFileEntry[] {
+  if (
+    !options.includeIgnoredFile &&
+    context.workspaceState.get<boolean>(MODEL_CONFIG_FILE_IGNORED_STATE, false)
+  ) {
+    return [];
+  }
+
+  try {
+    return readEnabledModelConfigFileEntries();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showWarningMessage(
+      `Could not read IAEDU model config file: ${message}`,
+    );
+    return [];
+  }
+}
+
+function readEnabledModelConfigFileEntries(): ModelConfigFileEntry[] {
+  return readModelConfigFile(getModelConfigFilePath());
+}
+
+function modelConfigEntryToProfile(
+  entry: ModelConfigFileEntry,
+): IaeduModelProfile {
+  return {
+    id: entry.id,
+    name: entry.name,
+    endpoint: entry.endpoint,
+    channelId: entry.channelId,
+  };
 }
 
 function getLegacyModelProfile(
@@ -521,24 +654,40 @@ async function getModelProfileStatuses(
   );
 }
 
-async function setActiveModelProfileConfig(
-  config: vscode.WorkspaceConfiguration,
-  profile: IaeduModelProfile,
-): Promise<void> {
-  await config.update(
-    ACTIVE_MODEL_PROFILE_CONFIG,
-    profile.id,
-    vscode.ConfigurationTarget.Workspace,
-  );
-  await config.update("endpoint", profile.endpoint, vscode.ConfigurationTarget.Workspace);
-  await config.update("channelId", profile.channelId, vscode.ConfigurationTarget.Workspace);
-}
-
 async function getProfileApiKey(
   context: vscode.ExtensionContext,
   profileId: string,
+  options: { includeIgnoredFile?: boolean } = {},
 ): Promise<string> {
+  const fileEntry = getModelConfigFileEntries(context, options).find(
+    (entry) => entry.id === profileId,
+  );
+  if (fileEntry?.apiKey) {
+    return fileEntry.apiKey;
+  }
   return (await context.secrets.get(apiKeySecret(profileId))) || "";
+}
+
+async function saveModelConfigProfile(
+  context: vscode.ExtensionContext,
+  profile: IaeduModelProfile,
+  apiKey: string,
+): Promise<void> {
+  const existingEntries = getModelConfigFileEntries(context, {
+    includeIgnoredFile: true,
+  });
+  const nextEntries = upsertModelConfigFileEntry(existingEntries, {
+    ...profile,
+    apiKey,
+  });
+  writeModelConfigFile(getModelConfigFilePath(), nextEntries);
+}
+
+function getModelConfigFilePath(): string {
+  const configuredPath = vscode.workspace
+    .getConfiguration("iaedu")
+    .get<string>(MODEL_CONFIG_PATH_CONFIG, DEFAULT_MODEL_CONFIG_PATH);
+  return resolveModelConfigPath(configuredPath);
 }
 
 function apiKeySecret(profileId: string): string {
@@ -553,17 +702,14 @@ function threadIdStateKey(profileId: string): string {
     : `${THREAD_ID_STATE_PREFIX}${profileId}`;
 }
 
-function upsertModelProfile(
-  profiles: IaeduModelProfile[],
-  nextProfile: IaeduModelProfile,
-): IaeduModelProfile[] {
-  const existingIndex = profiles.findIndex((profile) => profile.id === nextProfile.id);
-  if (existingIndex === -1) {
-    return [...profiles, nextProfile];
-  }
-
-  return profiles.map((profile, index) =>
-    index === existingIndex ? nextProfile : profile,
+function resolveThreadProfileId(
+  context: vscode.ExtensionContext,
+  profileId?: string,
+): string {
+  return (
+    profileId ||
+    getActiveModelProfileId(context, vscode.workspace.getConfiguration("iaedu")) ||
+    LEGACY_PROFILE_ID
   );
 }
 

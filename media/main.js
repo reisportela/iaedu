@@ -12,6 +12,9 @@
   const status = document.getElementById("status");
   const modelSelect = document.getElementById("modelSelect");
   const loginButton = document.getElementById("login");
+  const conversationSelect = document.getElementById("conversationSelect");
+  const saveConversationButton = document.getElementById("saveConversation");
+  const newThreadButton = document.getElementById("newThread");
   const configPanel = document.getElementById("configPanel");
   const configForm = document.getElementById("configForm");
   const configProfileSelect = document.getElementById("configProfileSelect");
@@ -19,6 +22,8 @@
   const configEndpoint = document.getElementById("configEndpoint");
   const configChannelId = document.getElementById("configChannelId");
   const configApiKey = document.getElementById("configApiKey");
+  const configLoadFile = document.getElementById("configLoadFile");
+  const configSaveFile = document.getElementById("configSaveFile");
   const configNewProfile = document.getElementById("configNewProfile");
   const configCancel = document.getElementById("configCancel");
   const newProfileValue = "__new__";
@@ -42,6 +47,8 @@
   const assistantMessages = new Map();
   let busy = false;
   let lastSettings = undefined;
+  let lastConversationList = [];
+  let activeThreadId = "";
 
   on(composer, "submit", (event) => {
     event.preventDefault();
@@ -96,6 +103,14 @@
 
   on(configCancel, "click", () => {
     hideConfigPanel();
+  });
+
+  on(configLoadFile, "click", () => {
+    vscode.postMessage({ type: "loadModelConfigFile" });
+  });
+
+  on(configSaveFile, "click", () => {
+    vscode.postMessage({ type: "saveModelConfigFile" });
   });
 
   on(configForm, "submit", (event) => {
@@ -154,8 +169,29 @@
     });
   });
 
-  on(document.getElementById("newThread"), "click", () => {
-    vscode.postMessage({ type: "newThread" });
+  on(conversationSelect, "change", () => {
+    if (!conversationSelect || !conversationSelect.value || busy) {
+      return;
+    }
+    if (conversationSelect.value === activeThreadId) {
+      return;
+    }
+    vscode.postMessage({
+      type: "selectConversation",
+      threadId: conversationSelect.value,
+    });
+  });
+
+  on(saveConversationButton, "click", () => {
+    if (!busy) {
+      vscode.postMessage({ type: "saveConversation" });
+    }
+  });
+
+  on(newThreadButton, "click", () => {
+    if (!busy) {
+      vscode.postMessage({ type: "newThread" });
+    }
   });
 
   on(stopButton, "click", () => {
@@ -176,6 +212,7 @@
     const message = event.data;
     if (message.type === "settings") {
       lastSettings = message;
+      activeThreadId = message.threadId || activeThreadId;
       renderModelSelect(message);
       if (includeActiveFile) {
         includeActiveFile.checked = Boolean(message.defaultIncludeActiveFile);
@@ -186,6 +223,12 @@
         fillConfigForm(message);
       }
       setConfigured(Boolean(message.configured), message);
+    } else if (message.type === "conversationList") {
+      renderConversationSelect(message.conversations || [], message.threadId);
+    } else if (message.type === "loadConversation") {
+      loadConversation(message);
+    } else if (message.type === "clearMessages") {
+      clearMessages();
     } else if (message.type === "user") {
       addMessage("user", message.text, {
         mode: message.mode,
@@ -217,11 +260,27 @@
     if (badges) {
       wrapper.appendChild(badges);
     }
+    if (role === "assistant") {
+      const visibleText = stripLocalActionBlocks(text);
+      const tools = document.createElement("div");
+      tools.className = "message-tools";
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "copy-message";
+      copyButton.textContent = "copy";
+      copyButton.title = "Copy response";
+      copyButton.disabled = visibleText.trim().length === 0;
+      copyButton.addEventListener("click", () => {
+        copyAssistantText(visibleText, copyButton);
+      });
+      tools.appendChild(copyButton);
+      wrapper.appendChild(tools);
+    }
     const body = document.createElement("div");
     body.className = "message-body";
     wrapper.appendChild(body);
     messages.appendChild(wrapper);
-    render(body, text);
+    render(body, role === "assistant" ? stripLocalActionBlocks(text) : text);
     scrollBottom();
   }
 
@@ -271,6 +330,34 @@
     }
     assistantMessages.delete(id);
     scrollBottom();
+  }
+
+  function loadConversation(message) {
+    activeThreadId = message.threadId || "";
+    clearMessages();
+    const savedMessages = Array.isArray(message.messages) ? message.messages : [];
+    savedMessages.forEach((item) => {
+      const role = normalizeSavedRole(item.role);
+      if (!role) {
+        return;
+      }
+      addMessage(role, item.text || "", {
+        mode: item.mode,
+        contextMode: item.contextMode,
+      });
+    });
+    scrollBottom();
+  }
+
+  function clearMessages() {
+    assistantMessages.clear();
+    if (messages) {
+      messages.replaceChildren();
+    }
+  }
+
+  function normalizeSavedRole(role) {
+    return ["user", "assistant", "error"].includes(role) ? role : undefined;
   }
 
   function copyAssistantText(text, button) {
@@ -533,6 +620,15 @@
     if (modelSelect) {
       modelSelect.disabled = value || getProfiles().length === 0;
     }
+    if (conversationSelect) {
+      conversationSelect.disabled = value || lastConversationList.length === 0;
+    }
+    if (saveConversationButton) {
+      saveConversationButton.disabled = value;
+    }
+    if (newThreadButton) {
+      newThreadButton.disabled = value;
+    }
   }
 
   function setConfigured(configured, settings) {
@@ -714,6 +810,47 @@
     });
     modelSelect.value = settings.modelProfileId || profiles[0].id;
     modelSelect.disabled = busy;
+  }
+
+  function renderConversationSelect(conversations, threadId) {
+    if (!conversationSelect) {
+      return;
+    }
+
+    lastConversationList = Array.isArray(conversations) ? conversations : [];
+    activeThreadId = threadId || activeThreadId;
+    replaceOptions(conversationSelect, []);
+    if (lastConversationList.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No saved chats";
+      conversationSelect.appendChild(option);
+      conversationSelect.disabled = true;
+      return;
+    }
+
+    lastConversationList.forEach((conversation) => {
+      const option = document.createElement("option");
+      option.value = conversation.threadId;
+      option.textContent = formatConversationLabel(conversation);
+      option.title = conversation.title || conversation.threadId;
+      conversationSelect.appendChild(option);
+    });
+
+    const hasActiveThread = lastConversationList.some(
+      (conversation) => conversation.threadId === activeThreadId,
+    );
+    conversationSelect.value = hasActiveThread
+      ? activeThreadId
+      : lastConversationList[0].threadId;
+    conversationSelect.disabled = busy;
+  }
+
+  function formatConversationLabel(conversation) {
+    const title = conversation.title || "New chat";
+    const count = Number(conversation.messageCount) || 0;
+    const suffix = count > 0 ? ` (${count})` : "";
+    return `${title}${suffix}`;
   }
 
   function renderConfigProfileOptions(settings) {

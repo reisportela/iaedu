@@ -30,9 +30,23 @@ test("extension contributes saved model profile settings and select command", ()
   const properties = packageJson.contributes.configuration.properties;
   assert.ok(properties["iaedu.modelProfiles"]);
   assert.ok(properties["iaedu.activeModelProfileId"]);
+  assert.equal(
+    properties["iaedu.modelConfigPath"].default,
+    "~/.secrets/IAEDU.md",
+  );
   assert.ok(
     packageJson.contributes.commands.some(
       (command) => command.command === "iaedu.selectModelProfile",
+    ),
+  );
+  assert.ok(
+    packageJson.contributes.commands.some(
+      (command) => command.command === "iaedu.loadModelConfigFile",
+    ),
+  );
+  assert.ok(
+    packageJson.contributes.commands.some(
+      (command) => command.command === "iaedu.saveModelConfigFile",
     ),
   );
 });
@@ -40,13 +54,20 @@ test("extension contributes saved model profile settings and select command", ()
 test("webview can save and switch IAEDU model profiles", () => {
   assert.match(extensionSource, /id="modelSelect"/);
   assert.match(extensionSource, /id="configProfileName"/);
+  assert.match(extensionSource, /id="configLoadFile"/);
+  assert.match(extensionSource, /id="configSaveFile"/);
   assert.match(webviewScript, /type: "selectModelProfile"/);
+  assert.match(webviewScript, /type: "loadModelConfigFile"/);
+  assert.match(webviewScript, /type: "saveModelConfigFile"/);
   assert.match(webviewScript, /profileName/);
 });
 
-test("model API keys are stored outside workspace settings", () => {
+test("model registry is stored outside workspace settings", () => {
   assert.match(configSource, /API_KEY_SECRET_PREFIX/);
   assert.match(configSource, /SecretStorage/);
+  assert.match(configSource, /MODEL_CONFIG_PATH_CONFIG/);
+  assert.match(configSource, /writeModelConfigFile/);
+  assert.match(configSource, /readModelConfigFile/);
   assert.doesNotMatch(
     JSON.stringify(
       packageJson.contributes.configuration.properties["iaedu.modelProfiles"],

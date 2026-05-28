@@ -145,6 +145,8 @@ vite.config.ts.timestamp-*
 .vite/
 
 .DS_Store
+*.swp
+.*.swp
 
 # Local VS Code/IAEDU workspace configuration
 .vscode/settings.json

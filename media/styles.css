@@ -209,6 +209,10 @@ textarea:focus {
   flex: 0 1 auto;
 }
 
+.toolbar-session {
+  flex: 1 1 320px;
+}
+
 .toolbar-run {
   margin-left: auto;
   justify-content: flex-end;
@@ -261,7 +265,8 @@ textarea:focus {
   background: var(--vscode-button-background);
 }
 
-.toolbar-model select {
+.toolbar-model select,
+.toolbar-session select {
   width: 100%;
   min-width: 130px;
   max-width: 220px;
@@ -270,6 +275,10 @@ textarea:focus {
   border: 1px solid var(--vscode-input-border);
   border-radius: 5px;
   padding: 5px 8px;
+}
+
+.toolbar-session select {
+  flex: 1 1 160px;
 }
 
 button {

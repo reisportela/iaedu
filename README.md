@@ -1,370 +1,520 @@
-# IAEDU Agent for VS Code
+# IAEDU Agent para VS Code
 
-IAEDU Agent for VS Code is a local VS Code extension that connects an editor
-workspace to the IAEDU `agent-chat` API. It is intended for users who already
-have IAEDU access through an eligible institution and want to use IAEDU while
-reading, writing, analyzing, or editing project files in VS Code.
+Esta extensão liga o IAEDU ao Visual Studio Code. Em vez de usar apenas a IA no
+navegador, passa a poder conversar com o IAEDU dentro do ambiente onde lê,
+escreve, programa e organiza os seus ficheiros de trabalho.
 
-The extension is currently available only for VS Code.
+A extensão é útil para alunos, professores e investigadores que querem usar o
+IAEDU com documentos, código, scripts, apontamentos, relatórios, exercícios ou
+projetos locais.
 
-Author: Miguel Portela, Universidade do Minho
+Autor: Miguel Portela, Universidade do Minho
 <miguel.portela@eeg.uminho.pt>.
 
-## What It Does
+Este repositório não inclui endpoints, `channel_id`, chaves API, configurações
+institucionais, dados de alunos, dados de investigação ou resultados locais.
 
-- Opens an IAEDU chat panel in the VS Code Activity Bar.
-- Sends chat prompts to the IAEDU API.
-- Can include the current selection or active file as local context.
-- Streams IAEDU responses into the panel.
-- Renders Markdown and LaTeX math in chat responses.
-- Keeps one `thread_id` per workspace and can start a new thread.
-- Provides three working modes: `ask`, `plan`, and `agent`.
-- Stores API keys in VS Code SecretStorage, not in repository files.
-- Supports optional `.env` import for local development.
-- In `agent` mode, applies proposed local actions only after guardrail checks
-  and, where needed, user review.
+## Em Poucas Palavras
 
-No IAEDU endpoint, channel ID, API key, or institution-specific configuration
-is included in this repository.
+Se já usou IA no navegador, esta extensão acrescenta três vantagens principais:
 
-## Requirements
+- Contexto local: pode pedir ajuda sobre o ficheiro que está aberto no VS Code,
+  ou sobre texto selecionado, sem copiar e colar tudo manualmente.
+- Trabalho por projeto: cada pasta pode ter instruções próprias num ficheiro
+  `IAEDU.md`, para orientar respostas, estilo, regras de trabalho e cuidados
+  com dados.
+- Agente assistido: no modo `agent`, o IAEDU pode propor alterações a ficheiros
+  ou comandos de validação. A extensão aplica essas ações apenas dentro da pasta
+  aberta e com regras de segurança.
 
-For normal use:
+## O Que É O VS Code?
 
-- VS Code 1.100 or newer.
-- IAEDU access through a participating institution.
-- IAEDU API connection details for the model or agent you want to use:
-  endpoint, API key, and channel ID (`channel_id`).
+Visual Studio Code, ou VS Code, é um editor gratuito da Microsoft. É muito usado
+para programar, mas também serve para escrever Markdown, LaTeX, relatórios,
+scripts de Stata/R/Python/Julia, ficheiros de configuração e documentação.
 
-For source builds:
+Pense no VS Code como uma secretária de trabalho para projetos:
 
-- Node.js and npm. The GitHub Actions build currently uses Node.js 22.
-- Git, if you are cloning the repository rather than downloading a source ZIP.
+- abre uma pasta inteira, não apenas um ficheiro;
+- mostra ficheiros, subpastas e histórico do projeto;
+- tem terminal integrado;
+- permite instalar extensões;
+- torna mais fácil trabalhar com IA sobre ficheiros reais do projeto.
 
-## IAEDU Background
+Página oficial de instalação:
 
-IAEDU is an FCT/FCCN platform for higher education and research in Portugal.
-Public IAEDU material describes it as a service that centralizes access to
-multiple artificial intelligence models and uses federated institutional
-authentication. Access is intended for users from participating institutions
-and is subject to IAEDU's responsible use policy.
+```text
+https://code.visualstudio.com/Download
+```
 
-Official IAEDU sources:
+Depois de instalar, abra o VS Code e escolha `File > Open Folder...` para abrir
+a pasta do projeto em que quer trabalhar.
 
-- IAEDU home page: <https://www.iaedu.pt/>
-- IAEDU usage page: <https://iaedu.pt/pt/como-utilizar>
-- IAEDU documentation: <https://docs.iaedu.pt/>
-- IAEDU access guide: <https://docs.iaedu.pt/books/bem-vindo-ao-iaedu/page/como-aceder>
-- IAEDU agents guide: <https://docs.iaedu.pt/books/funcionalidade-agentes/page/como-criar-agentes>
-- IAEDU API example: <https://docs.iaedu.pt/books/funcionalidade-api/page/exemplo-python>
+## O Que É Um Agente?
 
-## Install From a Release
+Neste contexto, um agente é uma forma de usar IA com mais contexto e mais
+capacidade de ajudar no fluxo de trabalho. Um chatbot no navegador responde ao
+que escreve na caixa de texto. Um agente dentro do VS Code pode também receber
+contexto do projeto aberto, do ficheiro atual e de instruções locais.
 
-This is the recommended path for most users. It does not require Git, Node.js,
-or npm, provided that a packaged `.vsix` file is available on the GitHub
-Releases page.
+Um agente pode ajudar a:
 
-1. Open the repository page in a browser.
-2. Go to the latest release.
+- explicar código, texto, tabelas ou erros;
+- rever um relatório ou script;
+- propor um plano antes de alterar ficheiros;
+- sugerir pequenas alterações;
+- gerar ou completar scripts;
+- propor comandos de teste, compilação ou validação;
+- manter uma conversa associada a um projeto.
+
+Importante: esta extensão não dá liberdade total à IA para mexer no computador.
+Quando há ações locais, elas passam por regras de segurança. A extensão bloqueia
+ações fora da pasta aberta e restringe comandos destrutivos ou sensíveis.
+
+## O Que Esta Extensão Faz
+
+- Abre um painel IAEDU na barra lateral do VS Code.
+- Envia perguntas para a API `agent-chat` do IAEDU.
+- Mostra respostas em streaming.
+- Renderiza Markdown e expressões matemáticas em LaTeX.
+- Pode incluir o ficheiro ativo ou texto selecionado como contexto.
+- Lê automaticamente um `IAEDU.md` na raiz da pasta aberta, se existir.
+- Permite guardar vários perfis de modelo/agente IAEDU.
+- Mantém histórico local de conversas por perfil.
+- Permite começar uma conversa nova com novo `thread_id`.
+- Tem três modos: `ask`, `plan` e `agent`.
+- No modo `agent`, apresenta ações locais propostas e aplica-as só quando passam
+  nas regras de segurança da extensão.
+
+## Pré-Requisitos
+
+Para usar a extensão:
+
+- VS Code 1.100.0 ou mais recente.
+- Acesso institucional ao IAEDU.
+- Dados API do modelo ou agente IAEDU que pretende usar:
+  - endpoint;
+  - API key;
+  - `channel_id`.
+
+Para desenvolver ou compilar a extensão a partir do código:
+
+- Node.js e npm.
+- Git.
+- Comando `code` disponível no terminal, se quiser instalar o VSIX pela linha de
+  comando.
+
+## Instalar O VS Code
+
+1. Vá a:
+
+   ```text
+   https://code.visualstudio.com/Download
+   ```
+
+2. Escolha o instalador para o seu sistema operativo.
+3. Instale normalmente.
+4. Abra o VS Code.
+5. Abra uma pasta de trabalho com `File > Open Folder...`.
+
+Quem nunca usou VS Code pode começar com uma pasta simples, por exemplo uma
+pasta com um relatório, scripts e dados de exemplo.
+
+## Instalar Esta Extensão
+
+O caminho recomendado para utilizadores finais é instalar o ficheiro `.vsix`
+publicado na página de releases do GitHub.
+
+1. Abra a página do repositório no GitHub.
+2. Vá a `Releases` e escolha a versão mais recente.
 
    ![Latest release link](images/latest.png)
 
-3. Download the latest `iaedu-agent-*.vsix` file.
-4. Open VS Code.
-5. Open the Command Palette with `View > Command Palette...`.
-6. Run `Extensions: Install from VSIX...`.
-7. Select the downloaded `.vsix` file.
-8. Reload VS Code if prompted.
+3. Descarregue o ficheiro:
 
-The GitHub `Code > Download ZIP` option downloads the source code, not an
-installable extension package. Use the release `.vsix` file when you only want
-to install the extension.
-
-## Install From Source
-
-Use this path if you want to build the extension yourself or install from a
-source ZIP instead of a release package.
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/reisportela/iaedu.git
-   cd iaedu
+   ```text
+   iaedu-agent-<versao>.vsix
    ```
 
-   If you downloaded a source ZIP, unzip it and open a terminal in the unzipped
-   folder instead.
+4. Abra o VS Code.
+5. Abra a Paleta de Comandos (`Command Palette`):
 
-2. Install dependencies:
-
-   ```bash
-   npm install
+   ```text
+   View > Command Palette...
    ```
 
-3. Compile the extension:
+6. Execute:
 
-   ```bash
-   npm run compile
+   ```text
+   Extensions: Install from VSIX...
    ```
 
-4. Run the tests:
+7. Escolha o ficheiro `.vsix` descarregado.
+8. Recarregue o VS Code se for pedido.
 
-   ```bash
-   npm run test
-   ```
+Para confirmar a instalação, abra a vista de extensões e procure `IAEDU Agent`.
+Se usar terminal, também pode verificar com:
 
-5. Build the VSIX package:
+```bash
+code --list-extensions --show-versions | grep -i iaedu
+```
 
-   ```bash
-   npm run package
-   ```
+O resultado deve incluir algo semelhante a:
 
-6. Install the generated package in VS Code. From a Linux or macOS shell:
+```text
+iaedu-community.iaedu-agent@<versao>
+```
 
-   ```bash
-   code --install-extension iaedu-agent-*.vsix --force
-   ```
+## Obter Os Dados API No IAEDU
 
-   You can also install the generated `.vsix` through VS Code with
-   `Extensions: Install from VSIX...`.
+A extensão precisa de dados API do IAEDU. Estes dados não vêm no repositório e
+não devem ser partilhados publicamente.
 
-7. Reload VS Code if prompted.
-
-## Get IAEDU API Details
-
-Before configuring the extension, obtain the IAEDU connection details for the
-model or agent you intend to use.
-
-1. Go to <https://www.iaedu.pt/> or directly to <https://chat.iaedu.pt/>.
-2. Sign in with institutional credentials.
+1. Aceda a <https://www.iaedu.pt/> ou <https://chat.iaedu.pt/>.
+2. Entre com credenciais institucionais.
 
    ![IAEDU login](images/entrar.png)
 
-   IAEDU uses federated authentication, so users do not need to create a
-   separate IAEDU account.
-
-3. Choose the AI model that fits the task.
+3. Escolha o modelo ou agente IAEDU que pretende usar.
 
    ![Available IAEDU models](images/modelos.png)
 
-   IAEDU documentation explains that different models have different strengths,
-   so the model choice should match the academic, research, or coding task.
+4. Para usar agentes, crie ou configure um agente no IAEDU. A configuração do
+   agente no IAEDU define o seu objetivo, instruções, modelo e eventuais
+   ficheiros de conhecimento.
 
-4. For agent workflows, create or configure an IAEDU agent in the IAEDU web
-   platform. The IAEDU agent guide covers naming the agent, describing its
-   purpose, writing a system prompt, choosing a model, optionally adding
-   knowledge-base files, and testing with realistic questions.
-
-5. Open the API information for the selected model or agent.
+5. Abra a informação API do modelo ou agente.
 
    ![API link in IAEDU](images/api.png)
 
-6. Record the endpoint, API key, and channel ID (`channel_id`).
+6. Guarde estes três elementos:
+
+   - endpoint;
+   - API key;
+   - `channel_id`.
 
    ![IAEDU API details](images/api_details.png)
 
-Availability of API access may depend on the selected model, IAEDU
-configuration, and institutional policy. This extension does not request,
-generate, or bundle IAEDU credentials.
+A disponibilidade da API pode depender do modelo, do agente e da política
+institucional. A extensão apenas usa os dados que o utilizador introduz
+localmente.
 
-## Configure the Extension
+## Configurar A Extensão
 
-After installing the extension, create at least one local IAEDU model profile.
-A model profile is the local configuration that tells the extension which IAEDU
-model or agent to call.
+Depois de instalar, crie pelo menos um perfil de modelo. Um perfil diz à
+extensão que endpoint, chave e canal deve usar.
 
-1. Open the IAEDU panel from the VS Code Activity Bar.
+1. Abra o painel IAEDU na barra lateral do VS Code.
 
    ![IAEDU extension icon](images/icon.png)
 
-   You can also open it from the Command Palette:
+   Também pode usar:
 
    ```text
    IAEDU: Open Chat
    ```
 
-2. In the IAEDU panel, select `config` or `sign in`.
+2. Clique em `config` ou `sign in`.
 
    ![IAEDU main menu](images/main_menu.png)
 
-3. Add a model profile.
+3. Adicione ou edite um perfil.
 
    ![IAEDU model settings](images/settings.png)
 
-4. Enter the profile details:
+4. Preencha:
 
-   - Model name: a local display name, such as `IAEDU default model`.
-   - Endpoint: the IAEDU `agent-chat` endpoint.
-   - API key: the IAEDU API key for this model or agent.
-   - Channel ID: the IAEDU channel ID (`channel_id`).
+   - Model name: nome local, por exemplo `IAEDU default model`;
+   - Endpoint: endpoint `agent-chat` do IAEDU;
+   - API key: chave API;
+   - Channel ID: `channel_id`.
 
-5. Save the profile and select it in the IAEDU panel.
+5. Guarde.
+6. Escolha o perfil no seletor de modelos do painel.
 
-Model names, endpoints, and channel IDs are stored in VS Code workspace
-settings. API keys are stored per profile in VS Code SecretStorage.
+O botão `send` só fica ativo quando o perfil tem endpoint, API key e
+`channel_id`.
 
-You can manage configuration with these Command Palette commands:
+## Usar No Dia A Dia
 
-```text
-IAEDU: Sign In / Configure API
-IAEDU: Select Model
-IAEDU: Set Endpoint
-IAEDU: Set API Key
-IAEDU: Set Channel ID
-IAEDU: Sign Out
-```
+1. Abra uma pasta no VS Code.
+2. Abra o painel IAEDU.
+3. Escolha o modelo.
+4. Escreva a pergunta.
+5. Escolha o modo:
+   - `ask`: perguntar e receber resposta;
+   - `plan`: pedir análise e plano sem ações locais;
+   - `agent`: permitir propostas de ações locais controladas.
+6. Opcionalmente ative `active file` para incluir o ficheiro aberto.
+7. Clique em `send`.
 
-`IAEDU: Sign Out` removes local IAEDU model profiles and their stored API keys.
-
-## Optional Local Development Setup
-
-For local development, you can import placeholder-based configuration from an
-untracked `.env` file.
-
-1. Copy `.env.example` to `.env`.
-2. Fill in your own IAEDU endpoint, channel ID, API key, and optional model
-   name.
-3. Run this Command Palette command:
-
-   ```text
-   IAEDU: Import Settings from .env
-   ```
-
-Never commit `.env` or real IAEDU credentials.
-
-## Workspace Instructions
-
-If the open VS Code workspace contains an `IAEDU.md` file at its root, the
-extension automatically includes that file as local project instructions for
-requests sent from the workspace. This is optional:
-
-- Requests still work when `IAEDU.md` is absent.
-- The extension does not search for `IAEDU.md` outside the open workspace.
-- `IAEDU.md` is useful for project-specific coding, writing, data, or review
-  instructions that should apply consistently to IAEDU requests.
-
-## Use the Extension
-
-Open the IAEDU panel from the Activity Bar or run:
-
-```text
-IAEDU: Open Chat
-```
-
-Type a prompt, select a model profile, and choose a mode:
-
-- `ask`: direct questions and ordinary chat.
-- `plan`: read-only analysis and implementation planning.
-- `agent`: guarded local actions proposed by IAEDU.
-
-Use `active file` to include the current editor file as context. To ask about
-selected text, right-click the selection and run:
+Para perguntar sobre texto selecionado:
 
 ```text
 IAEDU: Ask About Selection
 ```
 
-To reset the IAEDU conversation thread for the current workspace, run:
+Para perguntar sobre o ficheiro ativo:
 
 ```text
-IAEDU: Start New Thread
+IAEDU: Ask About Active File
 ```
 
-## Extension Modes
+O painel também inclui:
+
+- seletor de conversas guardadas;
+- `save chat`, para guardar a conversa atual;
+- `new chat`, para começar uma conversa nova;
+- `stop`, para cancelar uma resposta em curso;
+- botão de cópia nas respostas do assistente.
+
+## Exemplos De Uso
+
+Alunos podem usar a extensão para:
+
+- pedir explicações sobre código ou texto;
+- rever uma secção de relatório;
+- perceber erros em scripts;
+- transformar apontamentos em estrutura de relatório;
+- preparar perguntas para discussão com o professor.
+
+Professores podem usar a extensão para:
+
+- rever materiais de aula;
+- testar exemplos de código;
+- gerar exercícios iniciais;
+- comparar versões de um texto;
+- construir feedback estruturado;
+- trabalhar com scripts e documentação sem sair do projeto.
+
+Investigadores podem usar a extensão para:
+
+- documentar fluxos de trabalho;
+- rever scripts Stata/R/Python/Julia;
+- pedir planos de validação;
+- explorar erros de execução;
+- trabalhar com Markdown, Quarto, LaTeX e código no mesmo espaço.
+
+## Modos Da Extensão
 
 ### `ask`
 
-Use this mode for ordinary questions. The extension can include local context,
-but it does not ask IAEDU to propose file edits or commands.
+Use para perguntas normais. A extensão pode enviar contexto local, mas instrui o
+IAEDU a não propor ações executáveis.
 
 ### `plan`
 
-Use this mode for read-only analysis and implementation planning. It is useful
-when you want IAEDU to inspect context, explain a problem, propose a plan, or
-list validation steps before any local action is taken.
+Use quando quer análise, diagnóstico ou plano de trabalho antes de alterar
+ficheiros. É o modo adequado para pedir: "analisa este problema e diz-me como
+proceder".
 
 ### `agent`
 
-Use this mode when IAEDU may propose local actions. The extension recognizes
-fenced `iaedu-action` blocks and presents the actions in the panel. Local
-actions are constrained by guardrails before anything is applied.
+Use quando quer que o IAEDU possa propor alterações a ficheiros ou comandos de
+validação. As ações aparecem no painel e só são aplicadas se passarem nos
+guardrails, isto é, nas regras de segurança da extensão. Algumas ações simples e
+seguras podem ser aplicadas com `auto-accept`, se essa opção estiver ativa.
 
-Supported local action format:
+## Conversas E Histórico
 
-```iaedu-action
-{
-  "actions": [
-    {
-      "type": "writeFile",
-      "path": "relative/path.txt",
-      "content": "content"
-    },
-    {
-      "type": "appendFile",
-      "path": "script.do",
-      "content": "\nregress mpg weight"
-    },
-    {
-      "type": "replaceSelection",
-      "content": "new text"
-    },
-    {
-      "type": "runCommand",
-      "command": "npm test"
-    }
-  ]
-}
+A extensão usa `thread_id` para manter continuidade de conversa com o IAEDU.
+Cada perfil de modelo tem a sua conversa ativa.
+
+O histórico local é guardado no estado da área de trabalho do VS Code, não em
+ficheiros do repositório. A extensão mantém:
+
+- até 30 conversas;
+- até 80 mensagens por conversa;
+- títulos derivados da primeira pergunta;
+- truncagem de mensagens demasiado longas.
+
+`new chat` cria uma conversa vazia com novo `thread_id`. Não apaga
+automaticamente as conversas anteriores.
+
+## Instruções Do Projeto Com `IAEDU.md`
+
+Se a pasta aberta no VS Code tiver um ficheiro `IAEDU.md` na raiz, a extensão
+inclui esse ficheiro automaticamente em cada pedido.
+
+Use `IAEDU.md` para instruções como:
+
+- língua preferida;
+- estilo de resposta;
+- regras do projeto;
+- cuidados com dados;
+- convenções de código;
+- critérios de revisão.
+
+Exemplo simples:
+
+```markdown
+# IAEDU.md
+
+Responde em português europeu.
+Sê claro e rigoroso.
+Não inventes resultados empíricos.
+Quando analisares código, distingue erros, riscos e sugestões.
 ```
 
-## Guardrails
+Não coloque API keys, endpoints, `channel_id`, dados pessoais, dados de alunos
+ou dados sensíveis neste ficheiro.
 
-The extension is deliberately conservative. Local actions must stay inside the
-open workspace. The extension blocks or requires review for sensitive paths and
-commands.
+## Onde Ficam Guardadas As Configurações?
 
-Auto-accept is available only in `agent` mode and applies guarded low-risk
-actions inside the open workspace. It accepts small writes or appends to
-non-sensitive workspace text files, common non-destructive development and
-analysis commands such as test/build scripts, Python checks or workspace
-scripts, R scripts and package checks, Julia workspace scripts or package
-tests, and Stata batch `.do` files.
+Por defeito, os perfis de modelo ficam num ficheiro local fora do repositório:
 
-Commands must remain simple single commands with workspace-local paths.
-Auto-accept does not allow bulk-style writes, outside-workspace edits, system
-package installation, system file changes, destructive shell patterns,
-privileged commands, command pipes, redirects, or shell expansion.
+```text
+~/.secrets/IAEDU.md
+```
 
-Examples of blocked or restricted behavior include:
+O caminho pode ser alterado com a definição:
 
-- writing outside the workspace;
-- writing to protected paths such as `.git`, `.ssh`, or environment and
-  configuration files without review;
-- large automatic writes;
-- `sudo`, system package managers, service managers, and recursive permission
-  changes;
-- destructive Git commands such as `git reset --hard` and `git clean -f`;
-- download-and-execute command patterns such as `curl ... | sh`.
+```text
+iaedu.modelConfigPath
+```
 
-## Mathematical Expressions
+Exemplo do ficheiro de perfis:
 
-The response panel renders LaTeX mathematical expressions with KaTeX after
-Markdown rendering. It supports common inline and display formats:
+```text
+Model_Name=IAEDU default model
+Endpoint=https://api.iaedu.pt/agent-chat/...
+API_KEY=your-api-key
+Channel_ID=your-channel-id
+```
 
-- inline: `$x^2 + y^2 = z^2$`
-- inline: `\(x^2 + y^2 = z^2\)`
-- display: `$$\int_0^1 x^2\,dx = \frac{1}{3}$$`
-- display: `\[\int_0^1 x^2\,dx = \frac{1}{3}\]`
+A extensão também pode guardar chaves no VS Code SecretStorage como apoio local.
+Não deve guardar credenciais em `.vscode/settings.json`, no README, em
+capturas de ecrã ou no repositório.
 
-Math rendering is skipped inside code blocks and inline code so programming
-examples remain unchanged.
+## Comandos Principais
 
-## Development in VS Code
+| Comando | Para que serve |
+| --- | --- |
+| `IAEDU: Open Chat` | Abre o painel IAEDU. |
+| `IAEDU: Sign In / Configure API` | Cria ou edita um perfil. |
+| `IAEDU: Select Model` | Escolhe o perfil ativo. |
+| `IAEDU: Load Models from Config File` | Recarrega perfis de `~/.secrets/IAEDU.md`. |
+| `IAEDU: Save Models to Config File` | Guarda perfis no ficheiro local. |
+| `IAEDU: Set Endpoint` | Atualiza o endpoint do perfil ativo. |
+| `IAEDU: Set API Key` | Atualiza a API key do perfil ativo. |
+| `IAEDU: Set Channel ID` | Atualiza o `channel_id` do perfil ativo. |
+| `IAEDU: Start New Thread` | Começa uma conversa nova. |
+| `IAEDU: Sign Out` | Desliga a área de trabalho e limpa chaves locais do SecretStorage. |
 
-Open this repository in VS Code and press `F5`. The included launch
-configuration starts an Extension Development Host and compiles the extension
-before launch.
+## Que Informação É Enviada Ao IAEDU?
 
-The standard local validation loop is:
+Cada pedido envia:
+
+- `channel_id` do perfil ativo;
+- `thread_id` da conversa atual;
+- `user_info`, por defeito `{"source":"vscode-extension"}`;
+- a pergunta do utilizador;
+- contexto opcional do ficheiro ativo ou seleção;
+- instruções de `IAEDU.md`, se existir.
+
+O limite de contexto local é controlado por:
+
+```text
+iaedu.maxContextChars
+```
+
+Textos muito longos são truncados no meio.
+
+## Segurança E Regras De Segurança
+
+A extensão foi desenhada para ser conservadora.
+
+No modo `agent`, as ações locais têm de ficar dentro da pasta aberta no VS Code.
+A extensão bloqueia ou pede revisão para ações sensíveis.
+
+O `auto-accept` só existe no modo `agent` e só aceita ações de baixo risco,
+como:
+
+- pequenas escritas ou acrescentos em ficheiros de texto;
+- substituição de uma seleção não vazia;
+- comandos comuns de teste ou build;
+- scripts locais Python/R/Julia/Stata;
+- comandos Stata batch sobre ficheiros `.do`.
+
+A extensão bloqueia padrões como:
+
+- escrever fora da pasta aberta;
+- mexer em `.git` ou `.ssh`;
+- comandos com `sudo`;
+- gestores de pacotes do sistema;
+- `git push`;
+- `git reset --hard`;
+- `git clean -f`;
+- pipes, redirects e padrões difíceis de auditar;
+- `curl ... | sh` ou equivalente.
+
+## Matemática E Markdown
+
+As respostas suportam Markdown e expressões matemáticas em LaTeX, incluindo:
+
+- `$x^2 + y^2 = z^2$`
+- `\(x^2 + y^2 = z^2\)`
+- `$$\int_0^1 x^2\,dx = \frac{1}{3}$$`
+- `\[\int_0^1 x^2\,dx = \frac{1}{3}\]`
+
+Expressões dentro de blocos de código não são renderizadas como matemática.
+
+## Resolução De Problemas
+
+### O botão `send` está desligado
+
+Verifique se o perfil ativo tem endpoint, API key e `channel_id`.
+
+### Editei `~/.secrets/IAEDU.md` manualmente
+
+Execute:
+
+```text
+IAEDU: Load Models from Config File
+```
+
+### A resposta dá erro de API
+
+Confirme endpoint, API key, `channel_id` e disponibilidade API do modelo ou
+agente no IAEDU. Os detalhes técnicos aparecem no canal de saída
+`IAEDU Agent`.
+
+### O modo `agent` não aplicou uma ação
+
+Provavelmente a ação foi bloqueada pelas regras de segurança. Reveja a mensagem
+no painel e, se necessário, aplique manualmente depois de confirmar que é
+seguro.
+
+### Instalei uma versão nova mas continuo a ver a antiga
+
+Reinstale o `.vsix` e recarregue a janela do VS Code. Se estiver a desenvolver a
+extensão, recompile, reempacote e reinstale:
+
+```bash
+npm run compile
+npm run test
+npm run package
+code --install-extension iaedu-agent-*.vsix --force
+```
+
+## Para Desenvolvedores
+
+Para trabalhar no código da extensão:
+
+```bash
+git clone https://github.com/reisportela/iaedu.git
+cd iaedu
+npm install
+npm run compile
+npm run test
+npm run package
+```
+
+No VS Code, também pode abrir este repositório e carregar em `F5` para lançar
+um Extension Development Host.
+
+Alterações ao README entram no VSIX. Depois de alterar documentação destinada a
+utilizadores, volte a executar:
 
 ```bash
 npm run compile
@@ -372,25 +522,30 @@ npm run test
 npm run package
 ```
 
-## GitHub Release Packaging
+Antes de publicar, confirme que o VSIX não inclui `.env`, `IAEDU.md`,
+credenciais, dados locais, resultados gerados, logs, scripts de teste locais ou
+ficheiros de investigação.
 
-This repository includes a GitHub Actions workflow that builds and tests the
-extension, uploads the `.vsix` as a workflow artifact, and attaches it
-automatically to a published GitHub Release.
+## Conteúdo Do Repositório
 
-## Repository Contents
+- `src/`: código TypeScript da extensão.
+- `media/`: JavaScript, CSS e ícones do webview.
+- `test/`: testes de comportamento.
+- `.vscodeignore`: ficheiros excluídos do VSIX.
+- `.env.example`: exemplo sem credenciais reais.
+- `LICENSE`: licença MIT.
 
-- `src/`: TypeScript extension source.
-- `media/`: webview JavaScript, CSS, and icons.
-- `test/`: extension behavior tests.
-- `.vscode/`: development launch and task configuration.
-- `.vscodeignore`: files excluded from the VSIX package.
-- `.env.example`: placeholder IAEDU configuration keys.
-- `LICENSE`: MIT license.
+## Notas De Privacidade
 
-Generated folders and artifacts such as `node_modules/`, `dist/`, and `*.vsix`
-are ignored and should not be committed.
+- Não faça commit de `.env`.
+- Não faça commit de endpoints reais, API keys ou `channel_id`.
+- Não inclua credenciais em capturas de ecrã, testes, fixtures, README ou
+  releases.
+- Não faça commit de dados de alunos, dados de investigação, resultados locais,
+  logs ou respostas IAEDU geradas localmente.
+- Trate `~/.secrets/IAEDU.md` como ficheiro local de credenciais.
+- Use `IAEDU.md` apenas para instruções do projeto, não para segredos.
 
-## License
+## Licença
 
-This project is released under the MIT license. See `LICENSE`.
+Este projeto é distribuído sob licença MIT. Ver `LICENSE`.

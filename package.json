@@ -2,7 +2,7 @@
   "name": "iaedu-agent",
   "displayName": "IAEDU Agent for VS Code",
   "description": "VS Code chat and local agent bridge for the IAEDU agent API.",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "publisher": "iaedu-community",
   "author": "Miguel Portela, Universidade do Minho <miguel.portela@eeg.uminho.pt>",
   "license": "MIT",
@@ -36,6 +36,8 @@
     "onCommand:iaedu.setApiKey",
     "onCommand:iaedu.setChannelId",
     "onCommand:iaedu.importDotEnv",
+    "onCommand:iaedu.loadModelConfigFile",
+    "onCommand:iaedu.saveModelConfigFile",
     "onCommand:iaedu.clearThread",
     "onView:iaedu.chatView"
   ],
@@ -101,6 +103,14 @@
         "title": "IAEDU: Import Settings from .env"
       },
       {
+        "command": "iaedu.loadModelConfigFile",
+        "title": "IAEDU: Load Models from Config File"
+      },
+      {
+        "command": "iaedu.saveModelConfigFile",
+        "title": "IAEDU: Save Models to Config File"
+      },
+      {
         "command": "iaedu.clearThread",
         "title": "IAEDU: Start New Thread"
       }
@@ -121,12 +131,17 @@
         "iaedu.activeModelProfileId": {
           "type": "string",
           "default": "",
-          "description": "Identifier of the active IAEDU model profile."
+          "description": "Legacy identifier of the active IAEDU model profile. New selections are stored in workspace state."
+        },
+        "iaedu.modelConfigPath": {
+          "type": "string",
+          "default": "~/.secrets/IAEDU.md",
+          "description": "Machine-local IAEDU model registry file. The default keeps model details outside workspace settings."
         },
         "iaedu.modelProfiles": {
           "type": "array",
           "default": [],
-          "description": "Saved IAEDU model profiles. API keys are stored separately in VS Code SecretStorage.",
+          "description": "Legacy workspace IAEDU model profiles. New saves use iaedu.modelConfigPath.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -223,6 +238,12 @@
         },
         {
           "command": "iaedu.importDotEnv"
+        },
+        {
+          "command": "iaedu.loadModelConfigFile"
+        },
+        {
+          "command": "iaedu.saveModelConfigFile"
         },
         {
           "command": "iaedu.clearThread"

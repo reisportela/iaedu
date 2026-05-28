@@ -10,6 +10,8 @@ src/**
 test/**
 tsconfig.json
 *.vsix
+*.swp
+.*.swp
 *.do
 *.bak
 *.log

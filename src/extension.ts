@@ -4,16 +4,28 @@ import {
   configureConnection,
   ensureSettings,
   getSettings,
+  IaeduSettings,
   importDotEnv,
   isConfigured,
+  loadModelConfigFile,
   logout,
   saveConnectionSettings,
+  saveModelConfigFile,
   selectModelProfile,
   setApiKey,
   setChannelId,
   setEndpoint,
+  setThreadId,
   startNewThread,
 } from "./config";
+import {
+  appendChatHistoryMessage,
+  ensureChatHistoryThread,
+  getChatHistorySummaries,
+  getChatHistoryThread,
+  stripLocalActionBlocks,
+  touchChatHistoryThread,
+} from "./chatHistory";
 import {
   buildPrompt,
   getEditorContext,
@@ -82,10 +94,19 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("iaedu.importDotEnv", () =>
       importDotEnv(context),
     ),
-    vscode.commands.registerCommand("iaedu.clearThread", () => {
-      const threadId = startNewThread(context);
-      chatProvider.postStatus(`New chat: ${threadId}`);
-      vscode.window.showInformationMessage("IAEDU started a new chat.");
+    vscode.commands.registerCommand("iaedu.loadModelConfigFile", async () => {
+      await loadModelConfigFile(context);
+      chatProvider.refreshSettings();
+    }),
+    vscode.commands.registerCommand("iaedu.saveModelConfigFile", async () => {
+      await saveModelConfigFile(context);
+      chatProvider.refreshSettings();
+    }),
+    vscode.commands.registerCommand("iaedu.clearThread", async () => {
+      const threadId = await chatProvider.startNewConversation();
+      if (threadId) {
+        vscode.window.showInformationMessage("IAEDU started a new chat.");
+      }
     }),
   );
 }
@@ -165,6 +186,18 @@ class IAEduChatViewProvider implements vscode.WebviewViewProvider {
     this.session?.refreshSettings();
   }
 
+  async startNewConversation(): Promise<string | undefined> {
+    await this.reveal();
+    if (this.session) {
+      return this.session.startNewConversation();
+    }
+
+    const settings = await getSettings(this.context);
+    const threadId = startNewThread(this.context, settings.modelProfileId);
+    await ensureChatHistoryThread(this.context, settings.modelProfileId, threadId);
+    return threadId;
+  }
+
   dispose() {
     this.session?.dispose();
     this.session = undefined;
@@ -232,6 +265,27 @@ class IAEduChatSession {
     const assistantId = `assistant-${Date.now()}`;
     this.abortController = new AbortController();
 
+    await ensureChatHistoryThread(
+      this.context,
+      settings.modelProfileId,
+      settings.threadId,
+    );
+    await appendChatHistoryMessage(
+      this.context,
+      settings.modelProfileId,
+      settings.threadId,
+      {
+        role: "user",
+        text: userPrompt,
+        mode,
+        contextMode: editorContext?.userContext.contextMode as
+          | "selection"
+          | "activeFile"
+          | undefined,
+      },
+    );
+    this.postConversationList(settings);
+
     this.webview.postMessage({
       type: "user",
       text: userPrompt,
@@ -267,6 +321,19 @@ class IAEduChatSession {
         actions,
         autoAcceptActions,
       );
+      const visibleResponseText = stripLocalActionBlocks(responseText);
+      if (visibleResponseText.trim()) {
+        await appendChatHistoryMessage(
+          this.context,
+          settings.modelProfileId,
+          settings.threadId,
+          {
+            role: "assistant",
+            text: visibleResponseText,
+          },
+        );
+        this.postConversationList(settings);
+      }
       this.webview.postMessage({
         type: "assistantDone",
         id: assistantId,
@@ -279,6 +346,16 @@ class IAEduChatSession {
         this.webview.postMessage({ type: "status", text: "Request cancelled." });
       } else {
         this.output.appendLine(message);
+        await appendChatHistoryMessage(
+          this.context,
+          settings.modelProfileId,
+          settings.threadId,
+          {
+            role: "error",
+            text: message,
+          },
+        );
+        this.postConversationList(settings);
         this.webview.postMessage({ type: "error", text: message });
       }
     } finally {
@@ -351,12 +428,30 @@ class IAEduChatSession {
       return;
     }
 
+    if (message.type === "loadModelConfigFile") {
+      await loadModelConfigFile(this.context);
+      await this.refreshSettings();
+      return;
+    }
+
+    if (message.type === "saveModelConfigFile") {
+      await saveModelConfigFile(this.context);
+      await this.refreshSettings();
+      return;
+    }
+
     if (message.type === "newThread") {
-      const threadId = startNewThread(this.context);
-      this.webview.postMessage({
-        type: "status",
-        text: `New chat: ${threadId}`,
-      });
+      await this.startNewConversation();
+      return;
+    }
+
+    if (message.type === "selectConversation") {
+      await this.selectConversation(message.threadId);
+      return;
+    }
+
+    if (message.type === "saveConversation") {
+      await this.saveConversation();
       return;
     }
 
@@ -370,6 +465,105 @@ class IAEduChatSession {
       const result = await applyLocalAction(message.action, this.output);
       this.webview.postMessage({ type: "status", text: result.message });
     }
+  }
+
+  async startNewConversation(): Promise<string | undefined> {
+    if (this.abortController) {
+      vscode.window.showWarningMessage("Stop the current IAEDU request before starting a new chat.");
+      return undefined;
+    }
+
+    const settings = await getSettings(this.context);
+    const threadId = startNewThread(this.context, settings.modelProfileId);
+    await ensureChatHistoryThread(
+      this.context,
+      settings.modelProfileId,
+      threadId,
+    );
+    this.webview.postMessage({
+      type: "loadConversation",
+      threadId,
+      messages: [],
+    });
+    await this.refreshSettings();
+    this.webview.postMessage({
+      type: "status",
+      text: `New chat: ${threadId}`,
+    });
+    return threadId;
+  }
+
+  private async selectConversation(threadId: string) {
+    if (this.abortController) {
+      vscode.window.showWarningMessage("Stop the current IAEDU request before switching chats.");
+      return;
+    }
+
+    const selectedThreadId = threadId.trim();
+    if (!selectedThreadId) {
+      return;
+    }
+
+    const settings = await getSettings(this.context);
+    const thread = getChatHistoryThread(
+      this.context,
+      settings.modelProfileId,
+      selectedThreadId,
+    );
+    if (!thread) {
+      this.webview.postMessage({
+        type: "status",
+        text: "Saved chat not found.",
+      });
+      await this.refreshSettings();
+      return;
+    }
+
+    setThreadId(this.context, selectedThreadId, settings.modelProfileId);
+    await this.refreshSettings();
+    this.webview.postMessage({
+      type: "status",
+      text: `Loaded chat: ${thread.title}`,
+    });
+  }
+
+  private async saveConversation() {
+    const settings = await getSettings(this.context);
+    const thread = await touchChatHistoryThread(
+      this.context,
+      settings.modelProfileId,
+      settings.threadId,
+    );
+    this.postConversationList(settings);
+    this.webview.postMessage({
+      type: "status",
+      text: `Saved chat: ${thread.title}`,
+    });
+  }
+
+  private async postConversation(settings: IaeduSettings) {
+    const thread = await ensureChatHistoryThread(
+      this.context,
+      settings.modelProfileId,
+      settings.threadId,
+    );
+    this.webview.postMessage({
+      type: "loadConversation",
+      threadId: settings.threadId,
+      messages: thread.messages,
+    });
+    this.postConversationList(settings);
+  }
+
+  private postConversationList(settings: IaeduSettings) {
+    this.webview.postMessage({
+      type: "conversationList",
+      threadId: settings.threadId,
+      conversations: getChatHistorySummaries(
+        this.context,
+        settings.modelProfileId,
+      ),
+    });
   }
 
   private async processAutoAcceptActions(
@@ -474,6 +668,8 @@ class IAEduChatSession {
 	          </label>
 		        </div>
 		        <div class="config-actions">
+		          <button id="configLoadFile" type="button">load file</button>
+		          <button id="configSaveFile" type="button">save file</button>
 		          <button id="configNewProfile" type="button">new model</button>
 		          <button id="configCancel" type="button">cancel</button>
 		          <button id="configSave" type="submit">save</button>
@@ -515,6 +711,8 @@ class IAEduChatSession {
 	          <button id="login" type="button">config</button>
 	        </div>
 	        <div class="toolbar-group toolbar-session" aria-label="Session">
+	          <select id="conversationSelect" title="Saved chats"></select>
+	          <button id="saveConversation" type="button">save chat</button>
 	          <button id="newThread" type="button">new chat</button>
 	        </div>
 	        <div class="toolbar-group toolbar-run" aria-label="Run">
@@ -557,6 +755,7 @@ class IAEduChatSession {
       defaultMode: settings.defaultMode,
       threadId: settings.threadId,
     });
+    await this.postConversation(settings);
   }
 }
 
@@ -583,7 +782,11 @@ type WebviewMessage =
   | { type: "selectModelProfile"; profileId: string }
   | { type: "logout" }
   | { type: "importDotEnv" }
+  | { type: "loadModelConfigFile" }
+  | { type: "saveModelConfigFile" }
   | { type: "newThread" }
+  | { type: "selectConversation"; threadId: string }
+  | { type: "saveConversation" }
   | { type: "copyText"; text: string }
   | { type: "applyAction"; action: LocalAction };
 
