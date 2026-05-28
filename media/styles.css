@@ -327,13 +327,58 @@ button:disabled {
   opacity: 0.55;
 }
 
-.status {
+.status-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   min-height: 18px;
   margin-top: 6px;
+}
+
+.status {
+  min-height: 18px;
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-line;
+}
+
+.busy-indicator {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  border: 2px solid var(--vscode-progressBar-background, var(--vscode-button-background));
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: iaedu-spin 0.8s linear infinite;
+}
+
+.busy-indicator[hidden] {
+  display: none;
+}
+
+@keyframes iaedu-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy-indicator {
+    animation: iaedu-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes iaedu-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
 }
 
 .actions {

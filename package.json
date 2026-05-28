@@ -2,7 +2,7 @@
   "name": "iaedu-agent",
   "displayName": "IAEDU Agent for VS Code",
   "description": "VS Code chat and local agent bridge for the IAEDU agent API.",
-  "version": "0.1.13",
+  "version": "0.1.16",
   "publisher": "iaedu-community",
   "author": "Miguel Portela, Universidade do Minho <miguel.portela@eeg.uminho.pt>",
   "license": "MIT",
@@ -200,13 +200,23 @@
         },
         "iaedu.codexSkills.enabled": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Include local Codex SKILL.md instructions by default. This sends matching skill text to the IAEDU API."
         },
         "iaedu.codexSkills.path": {
           "type": "string",
           "default": "~/.codex/skills",
           "description": "Local folder where Codex skills are stored."
+        },
+        "iaedu.codexSkills.extraPaths": {
+          "type": "array",
+          "default": [
+            "~/Documents/AI/skills/skills_portela"
+          ],
+          "description": "Additional local folders where Codex-compatible SKILL.md files are stored. Later folders override duplicate skill names from earlier folders.",
+          "items": {
+            "type": "string"
+          }
         },
         "iaedu.codexSkills.includePluginSkills": {
           "type": "boolean",
@@ -222,10 +232,29 @@
         },
         "iaedu.codexSkills.maxChars": {
           "type": "number",
-          "default": 12000,
+          "default": 20000,
           "minimum": 1000,
           "maximum": 50000,
           "description": "Maximum number of Codex skill characters to include in one IAEDU request."
+        },
+        "iaedu.promptFiles.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically include readable text from local files explicitly mentioned in the prompt, including PDFs when pdftotext is available."
+        },
+        "iaedu.promptFiles.maxFiles": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum number of explicitly referenced local files to include in one IAEDU request."
+        },
+        "iaedu.promptFiles.maxChars": {
+          "type": "number",
+          "default": 80000,
+          "minimum": 1000,
+          "maximum": 500000,
+          "description": "Maximum extracted characters from explicitly referenced local files to include in one IAEDU request."
         }
       }
     },

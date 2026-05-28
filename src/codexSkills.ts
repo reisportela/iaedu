@@ -3,11 +3,15 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 export const DEFAULT_CODEX_SKILLS_PATH = "~/.codex/skills";
+export const DEFAULT_CODEX_EXTRA_SKILLS_PATHS = [
+  "~/Documents/AI/skills/skills_portela",
+];
 export const DEFAULT_CODEX_PLUGIN_SKILLS_PATH = "~/.codex/plugins/cache";
 
 export interface CodexSkillSettings {
   enabled: boolean;
   skillsPath: string;
+  extraPaths: string[];
   includePluginSkills: boolean;
   maxSkills: number;
   maxChars: number;
@@ -26,6 +30,7 @@ export interface CodexSkillContext {
   userContext: {
     codexSkillsEnabled: boolean;
     codexSkillsPath: string;
+    codexSkillsExtraPaths: string[];
     codexSkillsIncludePluginSkills: boolean;
     codexSkillsAvailable: number;
     codexSkillsSelected: string[];
@@ -68,9 +73,11 @@ const STOP_WORDS = new Set([
 
 const TOKEN_SYNONYMS: Record<string, string[]> = {
   artigo: ["paper", "manuscript"],
+  capitulo: ["chapter"],
   dados: ["data"],
   dado: ["data"],
   descritivas: ["descriptive", "statistics"],
+  doutoramento: ["phd", "thesis"],
   econometria: ["econometric"],
   econometrica: ["econometric"],
   empirica: ["empirical"],
@@ -78,8 +85,12 @@ const TOKEN_SYNONYMS: Record<string, string[]> = {
   literatura: ["literature"],
   manuscrito: ["manuscript"],
   metodologia: ["methods"],
+  orientador: ["supervisor"],
+  orientadora: ["supervisor"],
   pdf: ["pdf"],
   renomear: ["rename"],
+  relatorio: ["report", "review"],
+  resultados: ["results"],
   revisao: ["review"],
   rever: ["review"],
   reve: ["review"],
@@ -101,7 +112,7 @@ export function getCodexSkillContext(
     return undefined;
   }
 
-  const maxChars = clampInteger(settings.maxChars, 1000, 50000, 12000);
+  const maxChars = clampInteger(settings.maxChars, 1000, 50000, 20000);
   const maxSkills = clampInteger(settings.maxSkills, 1, 10, 3);
   const ranked = rankCodexSkills(skills, userPrompt);
   const selected = ranked
@@ -115,6 +126,7 @@ export function getCodexSkillContext(
     userContext: {
       codexSkillsEnabled: true,
       codexSkillsPath: settings.skillsPath,
+      codexSkillsExtraPaths: settings.extraPaths,
       codexSkillsIncludePluginSkills: settings.includePluginSkills,
       codexSkillsAvailable: skills.length,
       codexSkillsSelected: selected.map((skill) => skill.name),
@@ -124,17 +136,23 @@ export function getCodexSkillContext(
 }
 
 export function discoverCodexSkills(
-  settings: Pick<CodexSkillSettings, "skillsPath" | "includePluginSkills">,
+  settings: Pick<
+    CodexSkillSettings,
+    "skillsPath" | "extraPaths" | "includePluginSkills"
+  >,
 ): CodexSkill[] {
-  const roots = [settings.skillsPath];
+  const roots: Array<{ path: string; priority: number }> = [
+    { path: settings.skillsPath, priority: 10 },
+    ...(settings.extraPaths || []).map((root) => ({ path: root, priority: 20 })),
+  ];
   if (settings.includePluginSkills) {
-    roots.push(DEFAULT_CODEX_PLUGIN_SKILLS_PATH);
+    roots.push({ path: DEFAULT_CODEX_PLUGIN_SKILLS_PATH, priority: 5 });
   }
 
   const seen = new Set<string>();
-  const skills: CodexSkill[] = [];
+  const skillsByName = new Map<string, { skill: CodexSkill; priority: number }>();
   for (const root of roots) {
-    for (const filePath of findSkillFiles(resolveCodexPath(root))) {
+    for (const filePath of findSkillFiles(resolveCodexPath(root.path))) {
       if (seen.has(filePath)) {
         continue;
       }
@@ -142,7 +160,12 @@ export function discoverCodexSkills(
       try {
         const body = fs.readFileSync(filePath, "utf8").trim();
         if (body) {
-          skills.push(parseCodexSkillFile(filePath, body));
+          const skill = parseCodexSkillFile(filePath, body);
+          const key = normalizeForMatch(skill.name);
+          const existing = skillsByName.get(key);
+          if (!existing || root.priority >= existing.priority) {
+            skillsByName.set(key, { skill, priority: root.priority });
+          }
         }
       } catch {
         // Ignore unreadable local skills; the extension should not fail a chat.
@@ -150,7 +173,9 @@ export function discoverCodexSkills(
     }
   }
 
-  return skills.sort((left, right) => left.name.localeCompare(right.name));
+  return Array.from(skillsByName.values())
+    .map((item) => item.skill)
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function parseCodexSkillFile(filePath: string, body: string): CodexSkill {

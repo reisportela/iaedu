@@ -36,6 +36,7 @@ import {
   shouldIncludeWorkspaceOverview,
 } from "./editorContext";
 import { sendIaeduMessage } from "./iaeduClient";
+import { getReferencedFileContext } from "./referencedFiles";
 
 let activeProvider: IAEduChatViewProvider | undefined;
 
@@ -279,6 +280,11 @@ class IAEduChatSession {
       ...settings.codexSkills,
       enabled: includeCodexSkills,
     });
+    const referencedFileContext = await getReferencedFileContext(
+      userPrompt,
+      settings.promptFiles,
+      getWorkspaceFolderPaths(),
+    );
     const userContext = {
       source: "vscode-extension",
       workspace: vscode.workspace.name,
@@ -287,6 +293,7 @@ class IAEduChatSession {
       workspaceInstructions: workspaceInstructions?.userContext,
       workspaceOverview: workspaceOverview?.userContext,
       codexSkills: codexSkillContext?.userContext,
+      referencedFiles: referencedFileContext?.userContext,
       ...editorContext?.userContext,
     };
     const prompt = buildPrompt(
@@ -296,6 +303,7 @@ class IAEduChatSession {
       workspaceInstructions?.text,
       workspaceOverview?.text,
       codexSkillContext?.text,
+      referencedFileContext?.text,
     );
     const assistantId = `assistant-${Date.now()}`;
     this.abortController = new AbortController();
@@ -318,6 +326,7 @@ class IAEduChatSession {
           | "activeFile"
           | undefined,
         codexSkills: Boolean(codexSkillContext),
+        referencedFiles: Boolean(referencedFileContext),
       },
     );
     this.postConversationList(settings);
@@ -328,7 +337,20 @@ class IAEduChatSession {
       mode,
       contextMode: editorContext?.userContext.contextMode,
       codexSkills: Boolean(codexSkillContext),
+      referencedFiles: Boolean(referencedFileContext),
     });
+    if (referencedFileContext) {
+      const included =
+        referencedFileContext.userContext.promptFilesIncluded.length;
+      const skipped = referencedFileContext.userContext.promptFilesSkipped.length;
+      const excerpted = referencedFileContext.userContext.promptFilesTruncated
+        ? " (excerpted)"
+        : "";
+      this.webview.postMessage({
+        type: "status",
+        text: `Local files: ${included} included${excerpted}${skipped ? `; ${skipped} skipped` : ""}.`,
+      });
+    }
     this.webview.postMessage({ type: "assistantStart", id: assistantId });
     this.webview.postMessage({ type: "busy", busy: true });
 
@@ -793,7 +815,10 @@ class IAEduChatSession {
 	          <button id="send" type="submit">send</button>
 	        </div>
 	      </div>
-      <div id="status" class="status"></div>
+      <div class="status-row" aria-live="polite">
+        <span id="busyIndicator" class="busy-indicator" aria-label="IAEDU is working" hidden></span>
+        <div id="status" class="status"></div>
+      </div>
     </form>
   </main>
   <script nonce="${nonce}" src="${markdownItUri}"></script>
@@ -880,6 +905,12 @@ function normalizeMode(value: unknown): IaeduMode {
     return value;
   }
   return "ask";
+}
+
+function getWorkspaceFolderPaths(): string[] {
+  return (vscode.workspace.workspaceFolders || []).map(
+    (folder) => folder.uri.fsPath,
+  );
 }
 
 function getExtensionVersion(context: vscode.ExtensionContext): string {

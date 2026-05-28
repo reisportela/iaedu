@@ -209,6 +209,7 @@ export function buildPrompt(
   workspaceInstructionText?: string,
   workspaceOverviewText?: string,
   codexSkillText?: string,
+  referencedFileText?: string,
 ): string {
   const parts = [MODE_INSTRUCTIONS[mode]];
   if (workspaceInstructionText) {
@@ -219,6 +220,9 @@ export function buildPrompt(
   }
   if (codexSkillText) {
     parts.push(codexSkillText);
+  }
+  if (referencedFileText) {
+    parts.push(referencedFileText);
   }
   parts.push(userPrompt.trim());
   if (contextText) {

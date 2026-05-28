@@ -98,16 +98,28 @@ test("workspace IAEDU.md instructions are included automatically", () => {
   assert.match(extensionSource, /workspaceInstructions\?\.text/);
 });
 
-test("extension can include local Codex skills as opt-in context", () => {
+test("extension can include local Codex skills as request context", () => {
   const properties = packageJson.contributes.configuration.properties;
-  assert.equal(properties["iaedu.codexSkills.enabled"].default, false);
+  assert.equal(properties["iaedu.codexSkills.enabled"].default, true);
   assert.equal(properties["iaedu.codexSkills.path"].default, "~/.codex/skills");
+  assert.deepEqual(properties["iaedu.codexSkills.extraPaths"].default, [
+    "~/Documents/AI/skills/skills_portela",
+  ]);
   assert.match(extensionSource, /getCodexSkillContext/);
   assert.match(extensionSource, /includeCodexSkills/);
   assert.match(extensionSource, /Use skills from Codex/);
   assert.match(webviewScript, /includeCodexSkills/);
   assert.match(webviewScript, /Codex skills/);
   assert.match(editorContextSource, /codexSkillText/);
+});
+
+test("extension includes explicitly referenced local files as request context", () => {
+  const properties = packageJson.contributes.configuration.properties;
+  assert.equal(properties["iaedu.promptFiles.enabled"].default, true);
+  assert.equal(properties["iaedu.promptFiles.maxChars"].default, 80000);
+  assert.match(extensionSource, /getReferencedFileContext/);
+  assert.match(extensionSource, /referencedFileContext\?\.text/);
+  assert.match(webviewScript, /local files/);
 });
 
 test("agent mode uses local actions for requested file creation", () => {

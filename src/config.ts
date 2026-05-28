@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import {
   CodexSkillSettings,
   DEFAULT_CODEX_SKILLS_PATH,
+  DEFAULT_CODEX_EXTRA_SKILLS_PATHS,
 } from "./codexSkills";
 import type { IaeduMode } from "./editorContext";
 import {
@@ -14,6 +15,11 @@ import {
   upsertModelConfigFileEntry,
   writeModelConfigFile,
 } from "./modelConfigFile";
+import {
+  DEFAULT_PROMPT_FILE_MAX_CHARS,
+  DEFAULT_PROMPT_FILE_MAX_FILES,
+  PromptFileSettings,
+} from "./referencedFiles";
 
 const LEGACY_API_KEY_SECRET = "iaedu.apiKey";
 const API_KEY_SECRET_PREFIX = "iaedu.apiKey.profile.";
@@ -48,6 +54,7 @@ export interface IaeduSettings {
   defaultIncludeActiveFile: boolean;
   defaultMode: IaeduMode;
   codexSkills: CodexSkillSettings;
+  promptFiles: PromptFileSettings;
   modelProfileId: string;
   modelName: string;
   modelProfiles: IaeduModelProfileStatus[];
@@ -85,6 +92,7 @@ export async function getSettings(
   );
   const defaultMode = normalizeMode(config.get<string>("defaultMode", "ask"));
   const codexSkills = getCodexSkillSettings(config);
+  const promptFiles = getPromptFileSettings(config);
 
   return {
     endpoint: activeProfile?.endpoint || "",
@@ -96,6 +104,7 @@ export async function getSettings(
     defaultIncludeActiveFile,
     defaultMode,
     codexSkills,
+    promptFiles,
     modelProfileId: profileId,
     modelName: activeProfile?.name || DEFAULT_PROFILE_NAME,
     modelProfiles: await getModelProfileStatuses(context, profiles),
@@ -808,19 +817,54 @@ function getCodexSkillSettings(
   config: vscode.WorkspaceConfiguration,
 ): CodexSkillSettings {
   return {
-    enabled: config.get<boolean>("codexSkills.enabled", false),
+    enabled: config.get<boolean>("codexSkills.enabled", true),
     skillsPath: config.get<string>("codexSkills.path", DEFAULT_CODEX_SKILLS_PATH),
+    extraPaths: normalizeStringArray(
+      config.get<unknown>(
+        "codexSkills.extraPaths",
+        DEFAULT_CODEX_EXTRA_SKILLS_PATHS,
+      ),
+    ),
     includePluginSkills: config.get<boolean>(
       "codexSkills.includePluginSkills",
       false,
     ),
     maxSkills: clampInteger(config.get<number>("codexSkills.maxSkills", 3), 1, 10),
     maxChars: clampInteger(
-      config.get<number>("codexSkills.maxChars", 12000),
+      config.get<number>("codexSkills.maxChars", 20000),
       1000,
       50000,
     ),
   };
+}
+
+function getPromptFileSettings(
+  config: vscode.WorkspaceConfiguration,
+): PromptFileSettings {
+  return {
+    enabled: config.get<boolean>("promptFiles.enabled", true),
+    maxFiles: clampInteger(
+      config.get<number>("promptFiles.maxFiles", DEFAULT_PROMPT_FILE_MAX_FILES),
+      1,
+      10,
+    ),
+    maxChars: clampInteger(
+      config.get<number>("promptFiles.maxChars", DEFAULT_PROMPT_FILE_MAX_CHARS),
+      1000,
+      500000,
+    ),
+  };
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function clampInteger(value: number, min: number, max: number): number {

@@ -10,6 +10,7 @@
   const includeCodexSkills = document.getElementById("includeCodexSkills");
   const sendButton = document.getElementById("send");
   const stopButton = document.getElementById("stop");
+  const busyIndicator = document.getElementById("busyIndicator");
   const status = document.getElementById("status");
   const modelSelect = document.getElementById("modelSelect");
   const loginButton = document.getElementById("login");
@@ -241,6 +242,7 @@
       addMessage("user", message.text, {
         mode: message.mode,
         contextMode: message.contextMode,
+        referencedFiles: message.referencedFiles,
       });
     } else if (message.type === "assistantStart") {
       createAssistantMessage(message.id);
@@ -353,6 +355,7 @@
         mode: item.mode,
         contextMode: item.contextMode,
         codexSkills: item.codexSkills,
+        referencedFiles: item.referencedFiles,
       });
     });
     scrollBottom();
@@ -624,6 +627,9 @@
     if (stopButton) {
       stopButton.disabled = !value;
     }
+    if (busyIndicator) {
+      busyIndicator.hidden = !value;
+    }
     if (prompt) {
       prompt.disabled = false;
     }
@@ -731,6 +737,9 @@
     }
     if (meta.codexSkills) {
       values.push("Codex skills");
+    }
+    if (meta.referencedFiles) {
+      values.push("local files");
     }
     if (values.length === 0) {
       return undefined;

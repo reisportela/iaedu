@@ -14,6 +14,10 @@ const webviewScript = readFileSync(
   new URL("../media/main.js", import.meta.url),
   "utf8",
 );
+const stylesSource = readFileSync(
+  new URL("../media/styles.css", import.meta.url),
+  "utf8",
+);
 
 test("chat history is stored in VS Code workspace state with bounded retention", () => {
   assert.match(chatHistorySource, /CHAT_HISTORY_STATE = "iaedu\.chatHistory\.v1"/);
@@ -55,4 +59,12 @@ test("webview sends with Enter and queues prompts while busy", () => {
   assert.match(extensionSource, /queuePrompt/);
   assert.match(extensionSource, /runNextQueuedPrompt/);
   assert.match(extensionSource, /Queued message/);
+});
+
+test("webview shows a moving busy indicator while the agent works", () => {
+  assert.match(extensionSource, /id="busyIndicator"/);
+  assert.match(webviewScript, /busyIndicator\.hidden = !value/);
+  assert.match(stylesSource, /\.busy-indicator/);
+  assert.match(stylesSource, /animation: iaedu-spin/);
+  assert.match(stylesSource, /@keyframes iaedu-spin/);
 });

@@ -80,6 +80,8 @@ destrutivos ou sensíveis.
 - Mostra respostas em streaming.
 - Renderiza Markdown e expressões matemáticas em LaTeX.
 - Pode incluir o ficheiro ativo ou texto selecionado como contexto.
+- Pode incluir texto extraído de ficheiros locais explicitamente referidos no
+  prompt, incluindo PDFs quando `pdftotext` está disponível.
 - Lê automaticamente um `IAEDU.md` na raiz da pasta aberta, se existir.
 - Permite guardar vários perfis de modelo/agente IAEDU.
 - Mantém histórico local de conversas por perfil.
@@ -264,12 +266,26 @@ Para perguntar sobre o ficheiro ativo:
 IAEDU: Ask About Active File
 ```
 
+Se escrever no prompt o caminho de um ficheiro local suportado, por exemplo:
+
+```text
+estuda /home/mangelo/Documents/Alunos/Tadeu/6.Segundo_Paper_V07.pdf e produz um relatório
+```
+
+a extensão tenta ler esse ficheiro e enviar o texto extraído como contexto do
+pedido. Para PDFs usa `pdftotext`, quando disponível no computador. O ficheiro
+tem de ser explicitamente mencionado no prompt; a extensão não procura PDFs por
+conta própria. Em documentos longos, a extensão envia um conjunto de excertos
+por página e instrui o modelo a produzir um relatório cuidado mas limitado, para
+evitar respostas demasiado longas que possam terminar a meio.
+
 O painel também inclui:
 
 - seletor de conversas guardadas;
 - `save chat`, para guardar a conversa atual;
 - `new chat`, para começar uma conversa nova;
 - `stop`, para cancelar uma resposta em curso;
+- indicador animado enquanto o agente está a trabalhar;
 - botão de cópia nas respostas do assistente.
 
 ## Exemplos De Uso
@@ -376,17 +392,21 @@ caso, uma skill é um ficheiro `SKILL.md` com instruções especializadas, por
 exemplo para rever uma secção de dados, editar uma revisão de literatura ou
 seguir um procedimento técnico recorrente.
 
-Por defeito, esta opção vem desligada, porque o conteúdo das skills é enviado
-para a API IAEDU quando é usado.
+Por defeito, esta opção vem ligada nesta instalação, porque ajuda a aplicar
+instruções locais de revisão e supervisão. O conteúdo das skills é enviado para
+a API IAEDU quando é usado, por isso pode desligar a opção no painel ou nas
+definições se não quiser enviar esse contexto.
 
-Para usar skills num pedido concreto, assinale a opção
-`Use skills from Codex` no painel da extensão antes de enviar a pergunta.
+Para usar skills num pedido concreto quando a opção global estiver desligada,
+assinale `Use skills from Codex` no painel da extensão antes de enviar a
+pergunta.
 
 Para ativar as skills por defeito, use as definições do VS Code:
 
 ```text
 iaedu.codexSkills.enabled
 iaedu.codexSkills.path
+iaedu.codexSkills.extraPaths
 iaedu.codexSkills.includePluginSkills
 iaedu.codexSkills.maxSkills
 iaedu.codexSkills.maxChars
@@ -398,8 +418,16 @@ O caminho predefinido é:
 ~/.codex/skills
 ```
 
+Esta instalação também procura skills adicionais em:
+
+```text
+~/Documents/AI/skills/skills_portela
+```
+
 A extensão lê os ficheiros `SKILL.md`, seleciona as skills que parecem mais
 relevantes para o pedido e envia essas instruções juntamente com a pergunta.
+Quando duas pastas têm uma skill com o mesmo nome, a pasta adicional tem
+prioridade, para permitir versões locais mais específicas.
 Também pode listar skills instaladas por plugins do Codex se a opção
 `iaedu.codexSkills.includePluginSkills` estiver ativa.
 
@@ -465,6 +493,8 @@ Cada pedido envia:
 - `user_info`, por defeito `{"source":"vscode-extension"}`;
 - a pergunta do utilizador;
 - contexto opcional do ficheiro ativo ou seleção;
+- texto de ficheiros locais explicitamente mencionados no prompt, se
+  `iaedu.promptFiles.enabled` estiver ativo;
 - instruções de `IAEDU.md`, se existir.
 - uma lista limitada de caminhos da pasta aberta, apenas em pedidos de agente
   que pareçam exigir análise da pasta;
@@ -478,6 +508,15 @@ iaedu.maxContextChars
 ```
 
 Textos muito longos são truncados no meio.
+
+O limite próprio para ficheiros referidos no prompt é controlado por:
+
+```text
+iaedu.promptFiles.maxChars
+```
+
+O valor predefinido é conservador para estabilidade da API. Pode aumentá-lo se
+o endpoint usado tiver uma janela de contexto e tempo de resposta suficientes.
 
 ## Segurança E Regras De Segurança
 
