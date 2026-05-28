@@ -18,6 +18,7 @@ export interface ChatHistoryMessage {
   createdAt: number;
   mode?: IaeduMode;
   contextMode?: ChatHistoryContextMode;
+  codexSkills?: boolean;
 }
 
 export interface ChatHistoryThread {
@@ -42,6 +43,7 @@ export interface ChatHistoryMessageInput {
   text: string;
   mode?: IaeduMode;
   contextMode?: ChatHistoryContextMode;
+  codexSkills?: boolean;
 }
 
 export async function ensureChatHistoryThread(
@@ -83,6 +85,7 @@ export async function appendChatHistoryMessage(
     createdAt: now,
     mode: input.mode,
     contextMode: input.contextMode,
+    codexSkills: input.codexSkills,
   };
   const thread = findThread(threads, profileId, threadId) || {
     threadId,

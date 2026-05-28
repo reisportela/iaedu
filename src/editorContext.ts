@@ -8,6 +8,28 @@ export interface EditorContextResult {
 
 export type IaeduMode = "ask" | "plan" | "agent";
 
+const MAX_WORKSPACE_OVERVIEW_FILES = 350;
+const WORKSPACE_OVERVIEW_EXCLUDE = [
+  "**/.git/**",
+  "**/.vscode/**",
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/out/**",
+  "**/.env",
+  "**/.env.*",
+  "**/*.vsix",
+  "**/*.bak",
+  "**/*.log",
+  "**/*.dta",
+  "**/*.gph",
+  "**/*.parquet",
+  "**/*.rds",
+  "**/*.rdata",
+  "**/*.sas7bdat",
+  "**/*.sav",
+  "**/*.zip",
+].join(",");
+
 export function getEditorContext(
   mode: "selection" | "activeFile",
   maxChars: number,
@@ -93,15 +115,110 @@ export async function getWorkspaceInstructions(
   };
 }
 
+export async function getWorkspaceOverview(
+  maxChars: number,
+): Promise<EditorContextResult | undefined> {
+  const workspaceFolder = getInstructionWorkspaceFolder();
+  if (!workspaceFolder) {
+    return undefined;
+  }
+
+  const include = new vscode.RelativePattern(workspaceFolder, "**/*");
+  const exclude = new vscode.RelativePattern(
+    workspaceFolder,
+    `{${WORKSPACE_OVERVIEW_EXCLUDE}}`,
+  );
+  let fileUris: vscode.Uri[];
+  try {
+    fileUris = await vscode.workspace.findFiles(
+      include,
+      exclude,
+      MAX_WORKSPACE_OVERVIEW_FILES + 1,
+    );
+  } catch {
+    return undefined;
+  }
+
+  const truncatedFiles = fileUris.length > MAX_WORKSPACE_OVERVIEW_FILES;
+  const files = fileUris
+    .slice(0, MAX_WORKSPACE_OVERVIEW_FILES)
+    .map((uri) =>
+      path
+        .relative(workspaceFolder.uri.fsPath, uri.fsPath)
+        .split(path.sep)
+        .join("/"),
+    )
+    .filter((relativePath) => relativePath && !relativePath.startsWith(".."))
+    .sort();
+
+  if (files.length === 0) {
+    return undefined;
+  }
+
+  const text = [
+    "Local workspace overview:",
+    `Workspace: ${workspaceFolder.name}`,
+    "This is a bounded file-path overview supplied for folder-level agent requests.",
+    "It lists paths only, not file contents. Sensitive local files, large data files, build outputs and dependency folders are excluded.",
+    "",
+    "```text",
+    ...files,
+    truncatedFiles ? "[... file list truncated ...]" : "",
+    "```",
+    "",
+  ].join("\n");
+  const truncated = truncateMiddle(text, Math.min(maxChars, 12000));
+
+  return {
+    text: truncated,
+    userContext: {
+      workspaceOverviewWorkspace: workspaceFolder.name,
+      workspaceOverviewFiles: files.length,
+      workspaceOverviewFileListTruncated: truncatedFiles,
+      workspaceOverviewTextTruncated: truncated.length < text.length,
+    },
+  };
+}
+
+export function shouldIncludeWorkspaceOverview(
+  userPrompt: string,
+  mode: IaeduMode,
+): boolean {
+  if (mode !== "agent") {
+    return false;
+  }
+
+  const normalized = normalizeForIntent(userPrompt);
+  const mentionsFolder = /\b(folder|directory|workspace|repo|repository|project|pasta|diretorio|directorio|repositorio|projeto)\b/.test(
+    normalized,
+  );
+  const asksForFolderWork = /\b(study|analyse|analyze|inspect|describe|document|summarize|map|estuda|analisa|descreve|documenta|resume|mapeia)\b/.test(
+    normalized,
+  );
+  const asksForNotes = /\bnotas\s*md\b|\bnotes\s*md\b|\breadme\s*md\b/.test(
+    normalized,
+  );
+
+  return mentionsFolder || (asksForFolderWork && asksForNotes);
+}
+
 export function buildPrompt(
   userPrompt: string,
   contextText?: string,
   mode: IaeduMode = "ask",
   workspaceInstructionText?: string,
+  workspaceOverviewText?: string,
+  codexSkillText?: string,
 ): string {
   const parts = [MODE_INSTRUCTIONS[mode]];
   if (workspaceInstructionText) {
     parts.push(workspaceInstructionText);
+  }
+  if (workspaceOverviewText) {
+    parts.push(workspaceOverviewText);
+  }
+  if (codexSkillText) {
+    parts.push(codexSkillText);
   }
   parts.push(userPrompt.trim());
   if (contextText) {
@@ -138,6 +255,16 @@ function getInstructionWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
   return vscode.workspace.workspaceFolders?.[0];
 }
 
+function normalizeForIntent(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const MODE_INSTRUCTIONS: Record<IaeduMode, string> = {
   ask: [
     "IAEDU/VS Code ASK mode.",
@@ -158,6 +285,8 @@ const MODE_INSTRUCTIONS: Record<IaeduMode, string> = {
     "```iaedu-action",
     "{\"actions\":[{\"type\":\"writeFile\",\"path\":\"relative/path.txt\",\"content\":\"...\"},{\"type\":\"appendFile\",\"path\":\"script.do\",\"content\":\"...\"},{\"type\":\"replaceSelection\",\"content\":\"...\"},{\"type\":\"runCommand\",\"command\":\"npm test\"}]}",
     "```",
+    "If the user asks you to create, write, save, update or generate a workspace file, you must include a writeFile or appendFile action. Do not merely provide file content in chat for the user to copy manually.",
+    "For folder-level documentation requests such as creating NOTAS.md, use the supplied workspace overview and available context, then write the requested file with writeFile. If the overview is incomplete, create a useful draft that states its limits.",
     "Use paths relative to the workspace. For small additions to existing text files, such as adding a Stata regression to a .do file, use appendFile instead of a shell or Python command that edits the file. Prefer runCommand only for validation commands such as tests, builds, Stata batch do-files or workspace scripts. Do not propose destructive commands. Outside that block, briefly explain why the action is proposed.",
   ].join("\n"),
 };

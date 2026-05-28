@@ -7,6 +7,7 @@
   const modeInputs = Array.from(document.querySelectorAll("input[name='iaeduMode']"));
   const autoAcceptWrap = document.getElementById("autoAcceptWrap");
   const autoAcceptActions = document.getElementById("autoAcceptActions");
+  const includeCodexSkills = document.getElementById("includeCodexSkills");
   const sendButton = document.getElementById("send");
   const stopButton = document.getElementById("stop");
   const status = document.getElementById("status");
@@ -56,7 +57,7 @@
       return;
     }
     const text = prompt.value.trim();
-    if (!text || busy) {
+    if (!text) {
       return;
     }
     prompt.value = "";
@@ -66,6 +67,9 @@
       includeActiveFile: Boolean(includeActiveFile && includeActiveFile.checked),
       mode: getSelectedMode(),
       autoAcceptActions: shouldAutoAccept(),
+      includeCodexSkills: Boolean(
+        includeCodexSkills && includeCodexSkills.checked,
+      ),
     });
   });
 
@@ -203,7 +207,8 @@
   });
 
   on(prompt, "keydown", (event) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
       composer.requestSubmit();
     }
   });
@@ -216,6 +221,9 @@
       renderModelSelect(message);
       if (includeActiveFile) {
         includeActiveFile.checked = Boolean(message.defaultIncludeActiveFile);
+      }
+      if (includeCodexSkills) {
+        includeCodexSkills.checked = Boolean(message.codexSkillsEnabled);
       }
       setSelectedMode(message.defaultMode || "ask");
       updateAutoAcceptState();
@@ -344,6 +352,7 @@
       addMessage(role, item.text || "", {
         mode: item.mode,
         contextMode: item.contextMode,
+        codexSkills: item.codexSkills,
       });
     });
     scrollBottom();
@@ -609,13 +618,17 @@
   function setBusy(value) {
     busy = value;
     if (sendButton) {
-      sendButton.disabled = value || sendButton.dataset.configured !== "true";
+      sendButton.disabled = sendButton.dataset.configured !== "true";
+      sendButton.textContent = value ? "queue" : "send";
     }
     if (stopButton) {
       stopButton.disabled = !value;
     }
     if (prompt) {
-      prompt.disabled = value;
+      prompt.disabled = false;
+    }
+    if (includeCodexSkills) {
+      includeCodexSkills.disabled = false;
     }
     if (modelSelect) {
       modelSelect.disabled = value || getProfiles().length === 0;
@@ -634,24 +647,31 @@
   function setConfigured(configured, settings) {
     if (sendButton) {
       sendButton.dataset.configured = configured ? "true" : "false";
-      sendButton.disabled = busy || !configured;
+      sendButton.disabled = !configured;
+      sendButton.textContent = busy ? "queue" : "send";
     }
     if (prompt) {
-      prompt.disabled = busy;
+      prompt.disabled = false;
     }
     if (loginButton) {
       loginButton.textContent = configured ? "config" : "sign in";
     }
     if (configured) {
-      const endpoint = settings.endpoint || "";
-      const shortEndpoint =
-        endpoint.length > 44 ? `${endpoint.slice(0, 41)}...` : endpoint;
-      setStatus(
-        `connected | model: ${settings.modelName || "-"} | channel: ${settings.channelId || "-"} | ${shortEndpoint} | thread: ${settings.threadId}`,
-      );
+      setConnectedStatus(settings);
     } else {
       setStatus("not signed in: set a model profile, endpoint, Channel ID and API key");
     }
+  }
+
+  function setConnectedStatus(settings) {
+    const version = settings && settings.extensionVersion
+      ? settings.extensionVersion
+      : "-";
+    setStatus([
+      "CONNECTED",
+      `Version: ${version}`,
+      "Shortcuts: Enter = send/queue; Shift+Enter = new line",
+    ].join("\n"));
   }
 
   function setStatus(text) {
@@ -708,6 +728,9 @@
       values.push("selection");
     } else if (meta.contextMode === "activeFile") {
       values.push("file");
+    }
+    if (meta.codexSkills) {
+      values.push("Codex skills");
     }
     if (values.length === 0) {
       return undefined;

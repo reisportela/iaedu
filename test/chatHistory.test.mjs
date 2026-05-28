@@ -45,3 +45,14 @@ test("webview renders saved conversation controls and reloads messages", () => {
   assert.match(webviewScript, /function loadConversation\(message\)/);
   assert.match(webviewScript, /function renderConversationSelect\(conversations, threadId\)/);
 });
+
+test("webview sends with Enter and queues prompts while busy", () => {
+  assert.match(webviewScript, /event\.key === "Enter" && !event\.shiftKey/);
+  assert.match(webviewScript, /event\.preventDefault\(\)/);
+  assert.match(webviewScript, /sendButton\.textContent = value \? "queue" : "send"/);
+  assert.doesNotMatch(webviewScript, /!text \|\| busy/);
+  assert.match(extensionSource, /promptQueue/);
+  assert.match(extensionSource, /queuePrompt/);
+  assert.match(extensionSource, /runNextQueuedPrompt/);
+  assert.match(extensionSource, /Queued message/);
+});

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { applyLocalAction, LocalAction, parseLocalActions } from "./actions";
+import { getCodexSkillContext } from "./codexSkills";
 import {
   configureConnection,
   ensureSettings,
@@ -29,8 +30,10 @@ import {
 import {
   buildPrompt,
   getEditorContext,
+  getWorkspaceOverview,
   getWorkspaceInstructions,
   IaeduMode,
+  shouldIncludeWorkspaceOverview,
 } from "./editorContext";
 import { sendIaeduMessage } from "./iaeduClient";
 
@@ -122,6 +125,7 @@ interface SubmitOptions {
   contextMode?: ContextMode;
   mode?: IaeduMode;
   autoAcceptActions?: boolean;
+  includeCodexSkills?: boolean;
 }
 
 interface PendingPrompt {
@@ -206,6 +210,8 @@ class IAEduChatViewProvider implements vscode.WebviewViewProvider {
 
 class IAEduChatSession {
   private abortController: AbortController | undefined;
+  private readonly promptQueue: PendingPrompt[] = [];
+  private disposed = false;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -221,6 +227,8 @@ class IAEduChatSession {
   }
 
   dispose() {
+    this.disposed = true;
+    this.promptQueue.splice(0);
     this.abortController?.abort();
   }
 
@@ -229,13 +237,27 @@ class IAEduChatSession {
   }
 
   async submitPrompt(userPrompt: string, options: SubmitOptions = {}) {
+    const normalizedPrompt = userPrompt.trim();
+    if (!normalizedPrompt || this.disposed) {
+      return;
+    }
+
+    if (this.abortController) {
+      this.queuePrompt(normalizedPrompt, options);
+      return;
+    }
+
+    await this.runPrompt(normalizedPrompt, options);
+  }
+
+  private async runPrompt(userPrompt: string, options: SubmitOptions = {}) {
     const settings = await ensureSettings(this.context);
     if (!settings) {
       return;
     }
 
     if (this.abortController) {
-      vscode.window.showWarningMessage("An IAEDU request is already running.");
+      this.queuePrompt(userPrompt, options);
       return;
     }
 
@@ -248,12 +270,23 @@ class IAEduChatSession {
     const workspaceInstructions = await getWorkspaceInstructions(
       settings.maxContextChars,
     );
+    const workspaceOverview = shouldIncludeWorkspaceOverview(userPrompt, mode)
+      ? await getWorkspaceOverview(settings.maxContextChars)
+      : undefined;
+    const includeCodexSkills =
+      options.includeCodexSkills ?? settings.codexSkills.enabled;
+    const codexSkillContext = getCodexSkillContext(userPrompt, {
+      ...settings.codexSkills,
+      enabled: includeCodexSkills,
+    });
     const userContext = {
       source: "vscode-extension",
       workspace: vscode.workspace.name,
       mode,
       autoAcceptActions,
       workspaceInstructions: workspaceInstructions?.userContext,
+      workspaceOverview: workspaceOverview?.userContext,
+      codexSkills: codexSkillContext?.userContext,
       ...editorContext?.userContext,
     };
     const prompt = buildPrompt(
@@ -261,6 +294,8 @@ class IAEduChatSession {
       editorContext?.text,
       mode,
       workspaceInstructions?.text,
+      workspaceOverview?.text,
+      codexSkillContext?.text,
     );
     const assistantId = `assistant-${Date.now()}`;
     this.abortController = new AbortController();
@@ -282,6 +317,7 @@ class IAEduChatSession {
           | "selection"
           | "activeFile"
           | undefined,
+        codexSkills: Boolean(codexSkillContext),
       },
     );
     this.postConversationList(settings);
@@ -291,6 +327,7 @@ class IAEduChatSession {
       text: userPrompt,
       mode,
       contextMode: editorContext?.userContext.contextMode,
+      codexSkills: Boolean(codexSkillContext),
     });
     this.webview.postMessage({ type: "assistantStart", id: assistantId });
     this.webview.postMessage({ type: "busy", busy: true });
@@ -361,7 +398,38 @@ class IAEduChatSession {
     } finally {
       this.abortController = undefined;
       this.webview.postMessage({ type: "busy", busy: false });
+      await this.runNextQueuedPrompt();
     }
+  }
+
+  private queuePrompt(userPrompt: string, options: SubmitOptions) {
+    const maxQueuedPrompts = 10;
+    if (this.promptQueue.length >= maxQueuedPrompts) {
+      this.webview.postMessage({
+        type: "status",
+        text: `Queue full: ${maxQueuedPrompts} message(s) already waiting.`,
+      });
+      return;
+    }
+
+    this.promptQueue.push({ userPrompt, options });
+    this.webview.postMessage({
+      type: "status",
+      text: `Queued message ${this.promptQueue.length}. It will run after the current response.`,
+    });
+  }
+
+  private async runNextQueuedPrompt() {
+    const next = this.promptQueue.shift();
+    if (!next || this.disposed) {
+      return;
+    }
+
+    this.webview.postMessage({
+      type: "status",
+      text: `Running queued message. ${this.promptQueue.length} still waiting.`,
+    });
+    await this.submitPrompt(next.userPrompt, next.options);
   }
 
   private async handleWebviewMessage(message: WebviewMessage) {
@@ -375,6 +443,7 @@ class IAEduChatSession {
         contextMode: message.includeActiveFile ? "activeFile" : undefined,
         mode: normalizeMode(message.mode),
         autoAcceptActions: message.autoAcceptActions,
+        includeCodexSkills: message.includeCodexSkills,
       });
       return;
     }
@@ -703,6 +772,10 @@ class IAEduChatSession {
 	            <input id="autoAcceptActions" type="checkbox">
 	            <span>auto-accept</span>
 	          </label>
+	          <label class="toggle" title="Include matching local Codex SKILL.md instructions in this request.">
+	            <input id="includeCodexSkills" type="checkbox">
+	            <span>Use skills from Codex</span>
+	          </label>
 	        </div>
 	        <div class="toolbar-group toolbar-model" aria-label="Model">
 	          <select id="modelSelect" title="IAEDU model"></select>
@@ -753,6 +826,8 @@ class IAEduChatSession {
       modelProfiles: settings.modelProfiles,
       defaultIncludeActiveFile: settings.defaultIncludeActiveFile,
       defaultMode: settings.defaultMode,
+      codexSkillsEnabled: settings.codexSkills.enabled,
+      extensionVersion: getExtensionVersion(this.context),
       threadId: settings.threadId,
     });
     await this.postConversation(settings);
@@ -767,6 +842,7 @@ type WebviewMessage =
       includeActiveFile: boolean;
       mode: string;
       autoAcceptActions: boolean;
+      includeCodexSkills?: boolean;
     }
   | { type: "stop" }
   | { type: "setApiKey" }
@@ -804,4 +880,9 @@ function normalizeMode(value: unknown): IaeduMode {
     return value;
   }
   return "ask";
+}
+
+function getExtensionVersion(context: vscode.ExtensionContext): string {
+  const packageJson = context.extension.packageJSON as { version?: unknown };
+  return typeof packageJson.version === "string" ? packageJson.version : "";
 }

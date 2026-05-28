@@ -2,6 +2,7 @@
 .github/**
 AGENTS.md
 IAEDU.md
+GitHub_Actions_VSIX.md
 .gitignore
 .env
 .env.*

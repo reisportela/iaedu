@@ -130,8 +130,6 @@ publicado na página de releases do GitHub.
 1. Abra a página do repositório no GitHub.
 2. Vá a `Releases` e escolha a versão mais recente.
 
-   ![Latest release link](images/latest.png)
-
 3. Descarregue o ficheiro:
 
    ```text
@@ -248,7 +246,11 @@ O botão `send` só fica ativo quando o perfil tem endpoint, API key e
    - `plan`: pedir análise e plano sem ações locais;
    - `agent`: permitir propostas de ações locais controladas.
 6. Opcionalmente ative `active file` para incluir o ficheiro aberto.
-7. Clique em `send`.
+7. Prima `Enter` ou clique em `send`.
+
+Use `Shift+Enter` para inserir uma nova linha na pergunta. Se uma resposta
+estiver em curso, pode escrever nova instrução e premir `Enter`; a mensagem fica
+em fila e é enviada automaticamente quando a resposta atual terminar.
 
 Para perguntar sobre texto selecionado:
 
@@ -317,6 +319,12 @@ validação. As ações aparecem no painel e só são aplicadas se passarem nos
 guardrails, isto é, nas regras de segurança da extensão. Algumas ações simples e
 seguras podem ser aplicadas com `auto-accept`, se essa opção estiver ativa.
 
+Se pedir algo como "estuda esta pasta e cria um `NOTAS.md`", o modo `agent`
+deve propor a criação do ficheiro através de uma ação local `writeFile`, em vez
+de devolver apenas texto para copiar manualmente. A extensão pode também enviar
+um resumo limitado da lista de ficheiros da pasta para ajudar o agente a
+orientar este tipo de pedido.
+
 ## Conversas E Histórico
 
 A extensão usa `thread_id` para manter continuidade de conversa com o IAEDU.
@@ -360,6 +368,51 @@ Quando analisares código, distingue erros, riscos e sugestões.
 
 Não coloque API keys, endpoints, `channel_id`, dados pessoais, dados de alunos
 ou dados sensíveis neste ficheiro.
+
+## Use Skills From Codex
+
+A extensão pode usar skills locais do Codex como contexto adicional. Neste
+caso, uma skill é um ficheiro `SKILL.md` com instruções especializadas, por
+exemplo para rever uma secção de dados, editar uma revisão de literatura ou
+seguir um procedimento técnico recorrente.
+
+Por defeito, esta opção vem desligada, porque o conteúdo das skills é enviado
+para a API IAEDU quando é usado.
+
+Para usar skills num pedido concreto, assinale a opção
+`Use skills from Codex` no painel da extensão antes de enviar a pergunta.
+
+Para ativar as skills por defeito, use as definições do VS Code:
+
+```text
+iaedu.codexSkills.enabled
+iaedu.codexSkills.path
+iaedu.codexSkills.includePluginSkills
+iaedu.codexSkills.maxSkills
+iaedu.codexSkills.maxChars
+```
+
+O caminho predefinido é:
+
+```text
+~/.codex/skills
+```
+
+A extensão lê os ficheiros `SKILL.md`, seleciona as skills que parecem mais
+relevantes para o pedido e envia essas instruções juntamente com a pergunta.
+Também pode listar skills instaladas por plugins do Codex se a opção
+`iaedu.codexSkills.includePluginSkills` estiver ativa.
+
+Limites importantes:
+
+- a extensão envia apenas texto de `SKILL.md`;
+- não dá acesso automático às ferramentas internas do Codex;
+- não ativa MCP servers, conectores, scripts ou assets das skills;
+- não executa comandos guardados nas skills;
+- as ações locais continuam sujeitas às regras de segurança da extensão.
+
+Ou seja, as skills ajudam o agente a trabalhar com melhores instruções, mas não
+transformam a extensão no Codex completo.
 
 ## Onde Ficam Guardadas As Configurações?
 
@@ -413,6 +466,10 @@ Cada pedido envia:
 - a pergunta do utilizador;
 - contexto opcional do ficheiro ativo ou seleção;
 - instruções de `IAEDU.md`, se existir.
+- uma lista limitada de caminhos da pasta aberta, apenas em pedidos de agente
+  que pareçam exigir análise da pasta;
+- texto de skills locais do Codex, apenas quando a opção
+  `Use skills from Codex` estiver ativa.
 
 O limite de contexto local é controlado por:
 

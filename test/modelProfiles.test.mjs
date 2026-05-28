@@ -62,6 +62,17 @@ test("webview can save and switch IAEDU model profiles", () => {
   assert.match(webviewScript, /profileName/);
 });
 
+test("webview connected status does not expose model endpoint or channel", () => {
+  assert.match(webviewScript, /function setConnectedStatus/);
+  assert.match(webviewScript, /"CONNECTED"/);
+  assert.match(webviewScript, /`Version: \$\{version\}`/);
+  assert.match(webviewScript, /Shortcuts: Enter = send\/queue; Shift\+Enter = new line/);
+  assert.match(extensionSource, /extensionVersion: getExtensionVersion\(this\.context\)/);
+  assert.doesNotMatch(webviewScript, /connected \| model/);
+  assert.doesNotMatch(webviewScript, /channel: \$\{settings\.channelId/);
+  assert.doesNotMatch(webviewScript, /thread: \$\{settings\.threadId/);
+});
+
 test("model registry is stored outside workspace settings", () => {
   assert.match(configSource, /API_KEY_SECRET_PREFIX/);
   assert.match(configSource, /SecretStorage/);
@@ -85,6 +96,30 @@ test("workspace IAEDU.md instructions are included automatically", () => {
   );
   assert.match(extensionSource, /getWorkspaceInstructions/);
   assert.match(extensionSource, /workspaceInstructions\?\.text/);
+});
+
+test("extension can include local Codex skills as opt-in context", () => {
+  const properties = packageJson.contributes.configuration.properties;
+  assert.equal(properties["iaedu.codexSkills.enabled"].default, false);
+  assert.equal(properties["iaedu.codexSkills.path"].default, "~/.codex/skills");
+  assert.match(extensionSource, /getCodexSkillContext/);
+  assert.match(extensionSource, /includeCodexSkills/);
+  assert.match(extensionSource, /Use skills from Codex/);
+  assert.match(webviewScript, /includeCodexSkills/);
+  assert.match(webviewScript, /Codex skills/);
+  assert.match(editorContextSource, /codexSkillText/);
+});
+
+test("agent mode uses local actions for requested file creation", () => {
+  assert.match(editorContextSource, /getWorkspaceOverview/);
+  assert.match(editorContextSource, /shouldIncludeWorkspaceOverview/);
+  assert.match(
+    editorContextSource,
+    /you must include a writeFile or appendFile action/,
+  );
+  assert.match(editorContextSource, /Do not merely provide file content in chat/);
+  assert.match(editorContextSource, /creating NOTAS\.md/);
+  assert.match(extensionSource, /workspaceOverview\?\.text/);
 });
 
 test("auto-accept allows guarded Stata batch do-file commands", () => {

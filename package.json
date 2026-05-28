@@ -2,7 +2,7 @@
   "name": "iaedu-agent",
   "displayName": "IAEDU Agent for VS Code",
   "description": "VS Code chat and local agent bridge for the IAEDU agent API.",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "publisher": "iaedu-community",
   "author": "Miguel Portela, Universidade do Minho <miguel.portela@eeg.uminho.pt>",
   "license": "MIT",
@@ -197,6 +197,35 @@
           ],
           "default": "ask",
           "description": "Default IAEDU chat mode in the panel."
+        },
+        "iaedu.codexSkills.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include local Codex SKILL.md instructions by default. This sends matching skill text to the IAEDU API."
+        },
+        "iaedu.codexSkills.path": {
+          "type": "string",
+          "default": "~/.codex/skills",
+          "description": "Local folder where Codex skills are stored."
+        },
+        "iaedu.codexSkills.includePluginSkills": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also search Codex plugin-cache skills under ~/.codex/plugins/cache. Plugin skills may mention Codex tools that the IAEDU extension cannot expose."
+        },
+        "iaedu.codexSkills.maxSkills": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum number of matching Codex skill bodies to include in one IAEDU request."
+        },
+        "iaedu.codexSkills.maxChars": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 1000,
+          "maximum": 50000,
+          "description": "Maximum number of Codex skill characters to include in one IAEDU request."
         }
       }
     },

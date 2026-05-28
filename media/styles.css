@@ -332,6 +332,8 @@ button:disabled {
   margin-top: 6px;
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-line;
 }
 
 .actions {

@@ -1,6 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import {
+  CodexSkillSettings,
+  DEFAULT_CODEX_SKILLS_PATH,
+} from "./codexSkills";
 import type { IaeduMode } from "./editorContext";
 import {
   DEFAULT_MODEL_CONFIG_PATH,
@@ -43,6 +47,7 @@ export interface IaeduSettings {
   maxContextChars: number;
   defaultIncludeActiveFile: boolean;
   defaultMode: IaeduMode;
+  codexSkills: CodexSkillSettings;
   modelProfileId: string;
   modelName: string;
   modelProfiles: IaeduModelProfileStatus[];
@@ -79,6 +84,7 @@ export async function getSettings(
     false,
   );
   const defaultMode = normalizeMode(config.get<string>("defaultMode", "ask"));
+  const codexSkills = getCodexSkillSettings(config);
 
   return {
     endpoint: activeProfile?.endpoint || "",
@@ -89,6 +95,7 @@ export async function getSettings(
     maxContextChars,
     defaultIncludeActiveFile,
     defaultMode,
+    codexSkills,
     modelProfileId: profileId,
     modelName: activeProfile?.name || DEFAULT_PROFILE_NAME,
     modelProfiles: await getModelProfileStatuses(context, profiles),
@@ -795,6 +802,32 @@ function normalizeMode(value: string): IaeduMode {
     return value;
   }
   return "ask";
+}
+
+function getCodexSkillSettings(
+  config: vscode.WorkspaceConfiguration,
+): CodexSkillSettings {
+  return {
+    enabled: config.get<boolean>("codexSkills.enabled", false),
+    skillsPath: config.get<string>("codexSkills.path", DEFAULT_CODEX_SKILLS_PATH),
+    includePluginSkills: config.get<boolean>(
+      "codexSkills.includePluginSkills",
+      false,
+    ),
+    maxSkills: clampInteger(config.get<number>("codexSkills.maxSkills", 3), 1, 10),
+    maxChars: clampInteger(
+      config.get<number>("codexSkills.maxChars", 12000),
+      1000,
+      50000,
+    ),
+  };
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(value)));
 }
 
 function parseDotEnv(text: string): Record<string, string> {
