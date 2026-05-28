@@ -67,9 +67,11 @@ Um agente pode ajudar a:
 - propor comandos de teste, compilação ou validação;
 - manter uma conversa associada a um projeto.
 
-Importante: esta extensão não dá liberdade total à IA para mexer no computador.
-Quando há ações locais, elas passam por regras de segurança. A extensão bloqueia
-ações fora da pasta aberta e restringe comandos destrutivos ou sensíveis.
+Importante: estas regras reduzem o risco, mas não tornam o agente infalível. A
+IA pode interpretar mal um pedido, propor uma alteração inadequada ou executar
+uma ação com efeitos indesejados. Por isso, as ações locais passam por regras de
+segurança: a extensão bloqueia ações fora da pasta aberta e restringe comandos
+destrutivos ou sensíveis.
 
 ## O Que Esta Extensão Faz
 
